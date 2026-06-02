@@ -2,14 +2,13 @@ import type { Config } from 'tailwindcss'
 
 const config: Config = {
   content: [
-    './app/**/*.{ts,tsx,md,mdx}',
+    './app/**/*.{ts,tsx}',
     './src/**/*.{ts,tsx}',
-    './content/**/*.{md,mdx}',
   ],
   theme: {
     extend: {},
   },
-  plugins: [require('@tailwindcss/typography')],
+  plugins: [],
 }
 
 export default config

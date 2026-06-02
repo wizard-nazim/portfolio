@@ -20,10 +20,14 @@ const special = Special_Elite({ weight: '400', subsets: ['latin'], variable: '--
 const courier = Courier_Prime({ weight: ['400', '700'], subsets: ['latin'], variable: '--font-courier' })
 
 export const metadata: Metadata = {
-  title: 'Nazim — Artist · Musician · Developer',
+  title: "Nazim's Corner",
   description: 'Visual work, original music, and code. Based in Cape Town.',
+  icons: {
+    icon: '/favicon.png',
+    shortcut: '/favicon.png',
+  },
   openGraph: {
-    title: 'Nazim — Artist · Musician · Developer',
+    title: "Nazim's Corner",
     description: 'Visual work, original music, and code. Based in Cape Town.',
     images: ['/og-image.png'],
   },
