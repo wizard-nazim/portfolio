@@ -1,28 +1,73 @@
 'use client'
 
-import { useRef } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
-// ─── CRT monitor built from basic geometry ───────────────────────────────────
+// ─── CRT monitor — video texture on screen, basic geometry elsewhere ─────────
 function CRTMonitor() {
   const groupRef = useRef<THREE.Group>(null)
+
+  // null  = still loading / not yet ready
+  // false = load failed — show purple fallback
+  // VideoTexture = ready to render
+  const [videoTexture, setVideoTexture] = useState<THREE.VideoTexture | null | false>(null)
+
+  useEffect(() => {
+    let disposed = false
+
+    const video = document.createElement('video')
+    video.src = '/media/homepage-screen.mp4'
+    video.autoplay = true
+    video.loop = true
+    video.muted = true
+    video.playsInline = true
+    // Required for cross-origin CDN assets; safe for same-origin too
+    video.crossOrigin = 'anonymous'
+
+    const onCanPlay = () => {
+      if (disposed) return
+      const tex = new THREE.VideoTexture(video)
+      // LinearFilter avoids mipmap generation cost on a dynamic texture
+      tex.minFilter = THREE.LinearFilter
+      tex.magFilter = THREE.LinearFilter
+      // Correct gamma for browser video (sRGB) displayed in a Three.js scene
+      tex.colorSpace = THREE.SRGBColorSpace
+      setVideoTexture(tex)
+      // Kick off playback — catch silently (autoplay policy; first-frame still shows)
+      video.play().catch(() => {})
+    }
+
+    const onError = () => {
+      if (!disposed) setVideoTexture(false) // signal: fall back to purple
+    }
+
+    video.addEventListener('canplay', onCanPlay)
+    video.addEventListener('error', onError)
+    video.load()
+
+    return () => {
+      disposed = true
+      video.removeEventListener('canplay', onCanPlay)
+      video.removeEventListener('error', onError)
+      video.pause()
+      video.src = ''
+      video.load() // abort pending network requests
+    }
+  }, [])
 
   useFrame(({ clock }) => {
     if (!groupRef.current) return
     const t = clock.elapsedTime
-    // Base y offset centres the assembly; sin adds gentle float
     groupRef.current.position.y = 0.10 + Math.sin(t * 0.55) * 0.055
-    // Base y-rotation keeps right side visible for depth; sin adds slow sway
     groupRef.current.rotation.y = -0.20 + Math.sin(t * 0.32) * 0.08
-    // Slight downward tilt so top face catches rim light
     groupRef.current.rotation.x = 0.07
   })
 
   return (
     <group ref={groupRef}>
 
-      {/* MONITOR HOUSING — charcoal, clearly readable against black */}
+      {/* MONITOR HOUSING */}
       <mesh position={[0, 0, 0]}>
         <boxGeometry args={[2.05, 1.55, 0.55]} />
         <meshStandardMaterial
@@ -34,7 +79,7 @@ function CRTMonitor() {
         />
       </mesh>
 
-      {/* BEZEL FACE PLATE — thick raised border, darker than housing */}
+      {/* BEZEL FACE PLATE */}
       <mesh position={[0, 0.04, 0.295]}>
         <boxGeometry args={[1.85, 1.36, 0.06]} />
         <meshStandardMaterial
@@ -46,18 +91,8 @@ function CRTMonitor() {
         />
       </mesh>
 
-      {/* SCREEN — strong purple-blue emissive, feels alive */}
-      <mesh position={[0, 0.04, 0.325]}>
-        <planeGeometry args={[1.50, 1.04]} />
-        <meshStandardMaterial
-          color="#030010"
-          emissive="#5500dd"
-          emissiveIntensity={1.4}
-          roughness={0.06}
-        />
-      </mesh>
-
-      {/* SCREEN GLOW BORDER — phosphor halo just inside bezel edge */}
+      {/* SCREEN GLOW BORDER — stays purple; its edges extend beyond the screen
+          plane and create a phosphor-halo effect around the video */}
       <mesh position={[0, 0.04, 0.323]}>
         <planeGeometry args={[1.63, 1.15]} />
         <meshStandardMaterial
@@ -66,6 +101,27 @@ function CRTMonitor() {
           emissiveIntensity={0.70}
           roughness={0.5}
         />
+      </mesh>
+
+      {/* SCREEN — video texture when loaded, purple placeholder otherwise.
+          meshBasicMaterial is correct for a self-lit screen: it ignores scene
+          lighting so the video looks like it's actually emitting light. */}
+      <mesh position={[0, 0.04, 0.325]}>
+        <planeGeometry args={[1.50, 1.04]} />
+        {videoTexture ? (
+          <meshBasicMaterial
+            map={videoTexture}
+            toneMapped={false}
+          />
+        ) : (
+          // Purple fallback while loading OR if video fails
+          <meshStandardMaterial
+            color="#030010"
+            emissive="#5500dd"
+            emissiveIntensity={videoTexture === false ? 1.0 : 1.4}
+            roughness={0.06}
+          />
+        )}
       </mesh>
 
       {/* TOP VENT STRIP */}
@@ -79,7 +135,7 @@ function CRTMonitor() {
         />
       </mesh>
 
-      {/* CHIN BAR — glowing power strip at bottom front */}
+      {/* CHIN BAR */}
       <mesh position={[0, -0.735, 0.278]}>
         <boxGeometry args={[1.85, 0.08, 0.08]} />
         <meshStandardMaterial
@@ -90,7 +146,7 @@ function CRTMonitor() {
         />
       </mesh>
 
-      {/* POWER LED — bright magenta dot on chin bar */}
+      {/* POWER LED */}
       <mesh position={[0.70, -0.735, 0.323]}>
         <planeGeometry args={[0.04, 0.04]} />
         <meshStandardMaterial
@@ -136,24 +192,12 @@ export default function HeroScene() {
       gl={{ antialias: true, alpha: true }}
       dpr={[1, 2]}
     >
-      {/* Base ambient — housing always visible even in shadow */}
       <ambientLight intensity={0.28} />
-
-      {/* Key light — upper-right front, defines the shape */}
       <pointLight position={[4, 4, 4]} intensity={5.5} color="#c400ff" />
-
-      {/* Left fill — softens key-shadow side */}
       <pointLight position={[-3, 1.5, 2.5]} intensity={1.4} color="#6600cc" />
-
-      {/* Top rim — catches top face, makes depth obvious */}
       <pointLight position={[0.5, 5, 1.5]} intensity={2.5} color="#aa00ff" />
-
-      {/* Screen bloom — forward glow from the screen surface */}
       <pointLight position={[0, 0.04, 2.2]} intensity={3.0} color="#5500cc" />
-
-      {/* Back rim — thin edge separation from the black background */}
       <pointLight position={[0, 0, -3.5]} intensity={0.6} color="#330066" />
-
       <CRTMonitor />
     </Canvas>
   )
