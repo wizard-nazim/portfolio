@@ -1,4 +1,8 @@
 import Link from 'next/link'
+import HeroSceneWrapper from '@/components/HeroSceneWrapper'
+
+// ─── Toggle: set to false to revert to the 2D GIF fallback ──────────────────
+const USE_THREE_HERO = true
 
 export default function HomePage() {
   return (
@@ -9,10 +13,14 @@ export default function HomePage() {
       <div className="home-content">
         <section className="hero-synthwave">
 
-          {/* Left: CRT frame — future Three.js placeholder */}
+          {/* Left: CRT frame — Three.js scene or 2D GIF fallback */}
           <div className="crt-frame">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/homepage-gif.gif" alt="Nazim" className="hero-gif" />
+            {USE_THREE_HERO ? (
+              <HeroSceneWrapper />
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src="/homepage-gif.gif" alt="Nazim" className="hero-gif" />
+            )}
           </div>
 
           {/* Right: text */}

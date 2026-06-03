@@ -2012,6 +2012,13 @@ body::after {
   max-width: none;
 }
 
+/* R3F Canvas fills the frame — overrides Three.js inline size defaults */
+.crt-frame canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
 /* Scanline overlay on the CRT */
 .crt-frame::before {
   content: '';
