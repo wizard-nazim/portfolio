@@ -4,43 +4,34 @@ import { useRef, useEffect, useState } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
-// ─── CRT monitor — video texture on screen, basic geometry elsewhere ─────────
+// ─── CRT monitor — video texture + mouse parallax ────────────────────────────
 function CRTMonitor() {
   const groupRef = useRef<THREE.Group>(null)
 
-  // null  = still loading / not yet ready
-  // false = load failed — show purple fallback
-  // VideoTexture = ready to render
+  // ── Video texture ──────────────────────────────────────────────────────────
+  // null = loading, false = failed (show purple fallback), VideoTexture = ready
   const [videoTexture, setVideoTexture] = useState<THREE.VideoTexture | null | false>(null)
 
   useEffect(() => {
     let disposed = false
-
     const video = document.createElement('video')
     video.src = '/media/homepage-screen.mp4'
     video.autoplay = true
     video.loop = true
     video.muted = true
     video.playsInline = true
-    // Required for cross-origin CDN assets; safe for same-origin too
     video.crossOrigin = 'anonymous'
 
     const onCanPlay = () => {
       if (disposed) return
       const tex = new THREE.VideoTexture(video)
-      // LinearFilter avoids mipmap generation cost on a dynamic texture
       tex.minFilter = THREE.LinearFilter
       tex.magFilter = THREE.LinearFilter
-      // Correct gamma for browser video (sRGB) displayed in a Three.js scene
       tex.colorSpace = THREE.SRGBColorSpace
       setVideoTexture(tex)
-      // Kick off playback — catch silently (autoplay policy; first-frame still shows)
       video.play().catch(() => {})
     }
-
-    const onError = () => {
-      if (!disposed) setVideoTexture(false) // signal: fall back to purple
-    }
+    const onError = () => { if (!disposed) setVideoTexture(false) }
 
     video.addEventListener('canplay', onCanPlay)
     video.addEventListener('error', onError)
@@ -52,16 +43,55 @@ function CRTMonitor() {
       video.removeEventListener('error', onError)
       video.pause()
       video.src = ''
-      video.load() // abort pending network requests
+      video.load()
     }
   }, [])
 
+  // ── Mouse parallax — all in refs, zero React state updates per frame ───────
+  // Raw mouse position in normalised device coords: x/y ∈ [-1, 1]
+  const mouseRef = useRef({ x: 0, y: 0 })
+  // Smoothed (lerped) value that useFrame animates toward mouseRef
+  const smoothRef = useRef({ x: 0, y: 0 })
+
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      mouseRef.current.x =  (e.clientX / window.innerWidth)  * 2 - 1
+      mouseRef.current.y = -((e.clientY / window.innerHeight) * 2 - 1)
+    }
+    window.addEventListener('mousemove', onMouseMove)
+    return () => window.removeEventListener('mousemove', onMouseMove)
+  }, [])
+
+  // ── Animation loop ─────────────────────────────────────────────────────────
   useFrame(({ clock }) => {
     if (!groupRef.current) return
     const t = clock.elapsedTime
+
+    // Lerp smooth toward raw mouse — 0.04 ≈ 1.5 s to settle (premium feel)
+    smoothRef.current.x += (mouseRef.current.x - smoothRef.current.x) * 0.04
+    smoothRef.current.y += (mouseRef.current.y - smoothRef.current.y) * 0.04
+
+    // Clamp so extreme cursor positions stay within readable range
+    const mx = THREE.MathUtils.clamp(smoothRef.current.x, -1, 1)
+    const my = THREE.MathUtils.clamp(smoothRef.current.y, -1, 1)
+
+    // Float on Y
     groupRef.current.position.y = 0.10 + Math.sin(t * 0.55) * 0.055
-    groupRef.current.rotation.y = -0.20 + Math.sin(t * 0.32) * 0.08
-    groupRef.current.rotation.x = 0.07
+
+    // Y-axis: base depth angle + slow idle sway + mouse X influence
+    // Base -0.20 always keeps the right side visible → reads as 3D
+    groupRef.current.rotation.y =
+      -0.20 +                      // base angle (shows depth)
+      Math.sin(t * 0.32) * 0.08 + // slow idle sway
+      mx * 0.14                    // mouse X → max ±0.14 rad (≈ 8°)
+
+    // X-axis: base downward tilt + mouse Y influence
+    // Clamped so monitor never rotates past readable range
+    groupRef.current.rotation.x = THREE.MathUtils.clamp(
+      0.07 - my * 0.08,           // base tilt + mouse Y → max ±0.08 rad (≈ 4.5°)
+      -0.02,                       // never tilts fully back
+       0.18                        // never dips too far down
+    )
   })
 
   return (
@@ -91,8 +121,7 @@ function CRTMonitor() {
         />
       </mesh>
 
-      {/* SCREEN GLOW BORDER — stays purple; its edges extend beyond the screen
-          plane and create a phosphor-halo effect around the video */}
+      {/* SCREEN GLOW BORDER — purple phosphor halo around the video */}
       <mesh position={[0, 0.04, 0.323]}>
         <planeGeometry args={[1.63, 1.15]} />
         <meshStandardMaterial
@@ -103,18 +132,12 @@ function CRTMonitor() {
         />
       </mesh>
 
-      {/* SCREEN — video texture when loaded, purple placeholder otherwise.
-          meshBasicMaterial is correct for a self-lit screen: it ignores scene
-          lighting so the video looks like it's actually emitting light. */}
+      {/* SCREEN — video texture or purple fallback */}
       <mesh position={[0, 0.04, 0.325]}>
         <planeGeometry args={[1.50, 1.04]} />
         {videoTexture ? (
-          <meshBasicMaterial
-            map={videoTexture}
-            toneMapped={false}
-          />
+          <meshBasicMaterial map={videoTexture} toneMapped={false} />
         ) : (
-          // Purple fallback while loading OR if video fails
           <meshStandardMaterial
             color="#030010"
             emissive="#5500dd"
