@@ -9,8 +9,8 @@ export default function HomePage() {
       <div className="home-content">
         <section className="hero-synthwave">
 
-          {/* Left: GIF */}
-          <div className="hero-gif-wrap">
+          {/* Left: CRT frame — future Three.js placeholder */}
+          <div className="crt-frame">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/homepage-gif.gif" alt="Nazim" className="hero-gif" />
           </div>
@@ -18,8 +18,13 @@ export default function HomePage() {
           {/* Right: text */}
           <div className="hero-text-col">
 
-            {/* Location tag — yellow */}
-            <div className="hero-location-tag" style={{ color: '#ffffff' }}>Cape Town — Est. 2020</div>
+            {/* Name — anchors the section */}
+            <h1 className="hero-fullname">
+              Muhammad<br />Nazim Rafudeen
+            </h1>
+
+            {/* Location tag */}
+            <div className="hero-location-tag">Cape Town — Est. 2020</div>
 
             {/* Role blocks */}
             <div className="role-blocks">
@@ -28,44 +33,41 @@ export default function HomePage() {
               <span className="role-block">Developer</span>
             </div>
 
-            {/* Full name — same font as social-card-name (Permanent Marker) */}
-            <h1 style={{
-              fontFamily: 'var(--font-marker, cursive)',
-              fontSize: 32,
-              color: 'var(--color-text)',
-              lineHeight: 1.2,
-              marginBottom: 12,
-            }}>
-              Muhammad<br />
-              Nazim Rafudeen
-            </h1>
-
-            {/* Description */}
-            <p className="hero-sub" style={{ color: 'rgba(240, 230, 200, 0.55)' }}>
-            
-              Welcome to my corner of the internet where I share my work & thoughts. 
-              Make yourself comfortable, grab those headphones and listen to my tunes ^o^
-              <br />
-              <br />
-              I make music, art, code, and 
-              cry myself to sleep after debugging for 8 hours straight. 
-              Don`t worry though, that`s a joke, It`s actually 10 hours.
-              I also like cats, coffee, and long walks on the beach (just kidding, I don't go outside).
-              I hope you find something here that resonates with you. Peace and love!
+            {/* Bio */}
+            <p className="hero-sub">
+              Making music, art, and code out of Cape Town.
+              Grab those headphones and dig in — hope you find something that resonates. Peace and love ^o^
             </p>
 
             {/* Buttons */}
             <div className="hero-btns">
-              <Link href="/music" className="btn btn-primary">Hear music</Link>
+              <Link href="/music" className="btn btn-primary">Listen to Patience ▶</Link>
               <Link href="/contact" className="btn btn-outline">Get in touch</Link>
             </div>
 
           </div>
         </section>
 
-        {/* Latest */}
+        {/* Latest — 3 cards */}
         <div className="section-label" style={{ marginTop: 16 }}>Latest</div>
-        <div className="latest-grid latest-grid-2">
+        <div className="latest-grid latest-grid-3">
+
+          {/* Music */}
+          <Link href="/music" className="latest-card">
+            <div className="latest-card-thumb">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="https://i1.sndcdn.com/artworks-alS5LTECt8b6FSwo-xyWdIg-t500x500.jpg"
+                alt="Patience cover art"
+                className="latest-card-cover"
+              />
+            </div>
+            <div className="latest-card-title">Ｐａｔｉｅｎｃｅ (صبر)</div>
+            <div className="latest-card-meta">Single · 2025 · vetkat</div>
+            <div className="card-corner" />
+          </Link>
+
+          {/* Zine */}
           <Link href="/zine" className="latest-card">
             <div className="latest-card-thumb latest-card-thumb-text">
               <span style={{ fontFamily: 'var(--font-courier)', fontSize: 32, color: 'var(--color-text-dim)', letterSpacing: 4 }}>ZINE</span>
@@ -75,6 +77,7 @@ export default function HomePage() {
             <div className="card-corner" />
           </Link>
 
+          {/* GitHub */}
           <a href="https://github.com/wizard-nazim" target="_blank" rel="noopener" className="latest-card">
             <div className="latest-card-thumb latest-card-thumb-text">
               <span style={{ fontFamily: 'var(--font-courier)', fontSize: 28, color: 'var(--color-text-dim)', letterSpacing: 2 }}>&lt;/&gt;</span>
@@ -83,6 +86,7 @@ export default function HomePage() {
             <div className="latest-card-meta">GitHub · .NET · React · TypeScript</div>
             <div className="card-corner" />
           </a>
+
         </div>
       </div>
     </div>
