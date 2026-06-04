@@ -1,13 +1,19 @@
 'use client'
 
 import { useRef, useEffect, useState, Suspense } from 'react'
-import { Canvas, useFrame, useLoader } from '@react-three/fiber'
+import { Canvas, useFrame, useLoader, useThree } from '@react-three/fiber'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import * as THREE from 'three'
 
 // ─── Toggles ──────────────────────────────────────────────────────────────────
 const USE_GLB_MODEL = true
+
+// ── Drag rotation ─────────────────────────────────────────────────────────────
+const ENABLE_DRAG_ROTATION = true
+const DRAG_ROTATION_SPEED  = 0.006
+const DRAG_YAW_LIMIT       = 0.45
+const DRAG_PITCH_LIMIT     = 0.18
 
 // ── Model variant toggle — change this one constant to switch models ──────────
 // "crt"       → working CRT GLB with video overlay
@@ -502,6 +508,7 @@ function CustomCRT({ videoTexture }: { videoTexture: THREE.VideoTexture | null |
 // ─── Animated wrapper — parallax + float ──────────────────────────────────────
 function CRTMonitor() {
   const groupRef = useRef<THREE.Group>(null)
+  const { gl } = useThree()
 
   const [videoTexture, setVideoTexture] = useState<THREE.VideoTexture | null | false>(null)
   useEffect(() => {
@@ -532,8 +539,11 @@ function CRTMonitor() {
     }
   }, [])
 
-  const mouseRef  = useRef({ x: 0, y: 0 })
-  const smoothRef = useRef({ x: 0, y: 0 })
+  const mouseRef       = useRef({ x: 0, y: 0 })
+  const smoothRef      = useRef({ x: 0, y: 0 })
+  const isDraggingRef  = useRef(false)
+  const lastPointerRef = useRef({ x: 0, y: 0 })
+  const dragRotRef     = useRef({ yaw: 0, pitch: 0 })
   useEffect(() => {
     const fn = (e: MouseEvent) => {
       mouseRef.current.x =  (e.clientX / window.innerWidth)  * 2 - 1
@@ -543,6 +553,52 @@ function CRTMonitor() {
     return () => window.removeEventListener('mousemove', fn)
   }, [])
 
+  useEffect(() => {
+    if (!ENABLE_DRAG_ROTATION) return
+    const canvas = gl.domElement
+
+    const onDown = (e: PointerEvent) => {
+      isDraggingRef.current = true
+      lastPointerRef.current = { x: e.clientX, y: e.clientY }
+      canvas.setPointerCapture(e.pointerId)
+      canvas.style.cursor = 'grabbing'
+    }
+    const onMove = (e: PointerEvent) => {
+      if (!isDraggingRef.current) return
+      const dx = e.clientX - lastPointerRef.current.x
+      const dy = e.clientY - lastPointerRef.current.y
+      lastPointerRef.current = { x: e.clientX, y: e.clientY }
+      dragRotRef.current.yaw = THREE.MathUtils.clamp(
+        dragRotRef.current.yaw + dx * DRAG_ROTATION_SPEED,
+        -DRAG_YAW_LIMIT,
+        DRAG_YAW_LIMIT,
+      )
+      dragRotRef.current.pitch = THREE.MathUtils.clamp(
+        dragRotRef.current.pitch - dy * DRAG_ROTATION_SPEED,
+        -DRAG_PITCH_LIMIT,
+        DRAG_PITCH_LIMIT,
+      )
+    }
+    const onUp = () => {
+      isDraggingRef.current = false
+      canvas.style.cursor = 'grab'
+    }
+
+    canvas.style.cursor = 'grab'
+    canvas.addEventListener('pointerdown', onDown)
+    canvas.addEventListener('pointermove', onMove)
+    canvas.addEventListener('pointerup', onUp)
+    canvas.addEventListener('pointercancel', onUp)
+
+    return () => {
+      canvas.removeEventListener('pointerdown', onDown)
+      canvas.removeEventListener('pointermove', onMove)
+      canvas.removeEventListener('pointerup', onUp)
+      canvas.removeEventListener('pointercancel', onUp)
+      canvas.style.cursor = ''
+    }
+  }, [gl])
+
   useFrame(({ clock }) => {
     if (!groupRef.current) return
     const t = clock.elapsedTime
@@ -550,10 +606,16 @@ function CRTMonitor() {
     smoothRef.current.y += (mouseRef.current.y - smoothRef.current.y) * 0.04
     const mx = THREE.MathUtils.clamp(smoothRef.current.x, -1, 1)
     const my = THREE.MathUtils.clamp(smoothRef.current.y, -1, 1)
+    // Reduce parallax while dragging so drag feels responsive
+    const pScale = isDraggingRef.current ? 0.15 : 1.0
     groupRef.current.position.y = 0.10 + Math.sin(t * 0.55) * 0.055
     const baseY = USE_GLB_MODEL ? 0 : -0.20
-    groupRef.current.rotation.y = baseY + Math.sin(t * 0.32) * 0.08 + mx * 0.14
-    groupRef.current.rotation.x = THREE.MathUtils.clamp(0.07 - my * 0.08, -0.02, 0.18)
+    groupRef.current.rotation.y = baseY + Math.sin(t * 0.32) * 0.08 + mx * 0.14 * pScale + dragRotRef.current.yaw
+    groupRef.current.rotation.x = THREE.MathUtils.clamp(
+      0.07 - my * 0.08 * pScale + dragRotRef.current.pitch,
+      -0.25,
+      0.45,
+    )
   })
 
   return (
@@ -574,14 +636,14 @@ export default function HeroScene() {
   return (
     <Canvas
       style={{ width: '100%', height: '100%', display: 'block' }}
-      camera={{ position: [0, 0.2, 3.5], fov: 42 }}
+      camera={{ position: [0, 0.2, 3.5], fov: 35 }}
       gl={{ antialias: true, alpha: true }}
       dpr={[1, 2]}
     >
-      <ambientLight intensity={0.28} />
-      <pointLight position={[4, 4, 4]} intensity={5.5} color="#c400ff" />
-      <pointLight position={[-3, 1.5, 2.5]} intensity={1.4} color="#6600cc" />
-      <pointLight position={[0.5, 5, 1.5]} intensity={2.5} color="#aa00ff" />
+      <ambientLight intensity={0.5} />
+      <pointLight position={[4, 4, 4]} intensity={9.5} color="#c400ff" />
+      <pointLight position={[-3, 1.5, 2.5]} intensity={20.4} color="#e2dcdc" />
+      <pointLight position={[0.5, 5, 1.5]} intensity={110.5} color="#aa00ff" />
       <pointLight position={[0, 0.04, 2.2]} intensity={3.0} color="#5500cc" />
       <pointLight position={[0, 0, -3.5]} intensity={0.6} color="#330066" />
       <CRTMonitor />
