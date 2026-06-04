@@ -9,11 +9,11 @@ const ISSUES = [
     title: 'Patience with your own process',
     date: '2025-05-01',
     tag: 'Mood',
-    excerpt: 'In this world of distractions, learning to sit with the unfinished thing — the half-made song, the sketch you haven\'t touched in weeks — is its own kind of discipline.',
+    excerpt: 'In this world of distractions, learning to sit with the unfinished self and returning to Allah, is its own kind of discipline.',
     featured: true,
   },
   {
-    slug: 'issue-03',
+    slug: 'making-without-reason',
     issue: 3,
     title: 'Making without a reason',
     date: '2025-02-14',
@@ -22,7 +22,7 @@ const ISSUES = [
     featured: false,
   },
   {
-    slug: 'issue-02',
+    slug: 'playlist-as-map',
     issue: 2,
     title: 'The playlist as a map',
     date: '2024-11-01',
@@ -31,7 +31,7 @@ const ISSUES = [
     featured: false,
   },
   {
-    slug: 'issue-01',
+    slug: 'starting-over-again',
     issue: 1,
     title: 'Starting over (again)',
     date: '2024-08-10',

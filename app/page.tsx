@@ -80,7 +80,7 @@ export default function HomePage() {
             <div className="latest-card-thumb latest-card-thumb-text">
               <span style={{ fontFamily: 'var(--font-courier)', fontSize: 32, color: 'var(--color-text-dim)', letterSpacing: 4 }}>ZINE</span>
             </div>
-            <div className="latest-card-title">Zine — Issue #04</div>
+            <div className="latest-card-title">Zine — Sabr</div>
             <div className="latest-card-meta">Patience with your own process · 2025</div>
             <div className="card-corner" />
           </Link>
