@@ -8,25 +8,31 @@ import * as THREE from 'three'
 // ─── Toggles ──────────────────────────────────────────────────────────────────
 const USE_GLB_MODEL = true
 
-const MODEL_PATH = '/models/old_computer_monitor_and_tv_model..glb'
+const MODEL_PATH  = '/models/old_computer_monitor_and_tv_model..glb'
 const VIDEO_PATH  = '/media/homepage-screen.mp4'
 const SCREEN_MESH = 'Display_Display_0'
 const GROUND_MESH = 'Plane_Ground_0'
 
-// ─── Phase 3.3: rotation candidates ──────────────────────────────────────────
-// Comment/uncomment ONE line to test each orientation.
-// The screen mesh is Display_Display_0 — find the value where it faces the camera.
-//
-// const GLB_Y = 0               // native export (showed back/side originally)
-// const GLB_Y = Math.PI         // 180° flip — Phase 3.1 candidate
-// const GLB_Y = Math.PI / 2     // 90° left  — try if screen faces -X natively
-const GLB_Y = -Math.PI / 2       // 90° right — primary 3.3 candidate (screen faces +X natively)
+// ─── Overlay constants ────────────────────────────────────────────────────────
+// These values recreate the final working solution from the overlay pass.
+// Adjust here only — do not touch geometry or texture setup below.
+const OVERLAY_SCALE           = 0.72
+const OVERLAY_SIDE            = 1          // 1 = bbox.max.x face, -1 = bbox.min.x face
+const OVERLAY_DEPTH_OFFSET    = 0.01       // nudge in front of screen surface
+const OVERLAY_ROT_Y           = Math.PI / 2
+const OVERLAY_FLIP_Y          = false
+const OVERLAY_TEXTURE_ROTATION = Math.PI / 2
+const OVERLAY_MIRROR_X        = true       // UV-level flip — prevents MIZAN instead of NAZIM
+
+// ─── GLB orientation ──────────────────────────────────────────────────────────
+// Screen face (+X in model space) → face camera (+Z) with -Math.PI/2 on Y
+const GLB_Y = -Math.PI / 2
 
 // ─── GLB model component ──────────────────────────────────────────────────────
 function GLBMonitor() {
   const { scene, nodes } = useGLTF(MODEL_PATH)
 
-  // Log mesh names (debug — remove when orientation is finalised)
+  // Mesh structure log (useful during dev, harmless in prod)
   useEffect(() => {
     console.group('[Hero GLB] Model loaded')
     scene.traverse((child) => {
@@ -35,16 +41,15 @@ function GLBMonitor() {
         const mat = Array.isArray(m.material)
           ? m.material.map((x) => x.name || '(unnamed)').join(', ')
           : (m.material as THREE.Material).name || '(unnamed)'
-        console.log(`  Mesh: "${m.name}" | visible=${m.visible} | mat: ${mat}`)
+        console.log(`  "${m.name}" visible=${m.visible} mat=${mat}`)
       }
     })
-    console.log('  All node keys:', Object.keys(nodes).join(', '))
+    console.log('  nodes:', Object.keys(nodes).join(', '))
     console.groupEnd()
   }, [scene, nodes])
 
-  // Scene setup: hide ground plane + apply video texture to display
   useEffect(() => {
-    // ── 1. Hide ground plane ──────────────────────────────────────────────────
+    // ── 1. Hide ground plane ─────────────────────────────────────────────────
     scene.traverse((child) => {
       if (child.name === GROUND_MESH) {
         child.visible = false
@@ -52,53 +57,104 @@ function GLBMonitor() {
       }
     })
 
-    // ── 2. Find display mesh ──────────────────────────────────────────────────
+    // ── 2. Find display mesh ─────────────────────────────────────────────────
     let displayMesh: THREE.Mesh | null = null
-    let originalMaterial: THREE.Material | THREE.Material[] | null = null
-
     scene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh && child.name === SCREEN_MESH) {
         displayMesh = child as THREE.Mesh
-        originalMaterial = displayMesh.material
       }
     })
 
-    if (displayMesh) {
-      console.log(`[Hero GLB] "${SCREEN_MESH}" found — applying video texture`)
-    } else {
-      console.warn(`[Hero GLB] "${SCREEN_MESH}" not found — scene safe, no crash`)
+    if (!displayMesh) {
+      console.warn(`[Hero GLB] "${SCREEN_MESH}" not found — overlay skipped, scene safe`)
+      return
+    }
+    console.log(`[Hero GLB] "${SCREEN_MESH}" found`)
+
+    // ── 3. Darken display mesh (near-black screen background) ────────────────
+    const originalMaterial = (displayMesh as THREE.Mesh).material
+    const darkMat = new THREE.MeshBasicMaterial({ color: '#000', toneMapped: false })
+    ;(displayMesh as THREE.Mesh).material = darkMat
+
+    // ── 4. Compute bounding box in local (geometry) space ───────────────────
+    ;(displayMesh as THREE.Mesh).geometry.computeBoundingBox()
+    const bbox   = (displayMesh as THREE.Mesh).geometry.boundingBox!
+    const size   = bbox.getSize(new THREE.Vector3())
+    const center = bbox.getCenter(new THREE.Vector3())
+
+    // size.x = depth/thickness of display mesh — do NOT use for overlay size.
+    // size.y and size.z are the visible screen face dimensions.
+    const overlaySize = Math.min(size.y, size.z) * OVERLAY_SCALE
+    console.log(`[Hero GLB] bbox  x=${size.x.toFixed(3)} y=${size.y.toFixed(3)} z=${size.z.toFixed(3)}`)
+    console.log(`[Hero GLB] overlaySize=${overlaySize.toFixed(3)}`)
+
+    // ── 5. Create overlay plane geometry ─────────────────────────────────────
+    const overlayGeo = new THREE.PlaneGeometry(overlaySize, overlaySize)
+
+    // ── 6. UV-level mirror on X (prevents text appearing as MIZAN) ───────────
+    if (OVERLAY_MIRROR_X) {
+      const uv = overlayGeo.attributes.uv
+      for (let i = 0; i < uv.count; i++) {
+        uv.setX(i, 1 - uv.getX(i))
+      }
+      uv.needsUpdate = true
     }
 
-    // ── 3. Set up video ───────────────────────────────────────────────────────
-    let disposed = false
+    // ── 7. Set up video element ───────────────────────────────────────────────
+    let disposed   = false
+    let overlayMesh: THREE.Mesh | null = null
+
     const video = document.createElement('video')
-    video.src = VIDEO_PATH
-    video.autoplay = true
-    video.loop = true
-    video.muted = true
+    video.src         = VIDEO_PATH
+    video.autoplay    = true
+    video.loop        = true
+    video.muted       = true
     video.playsInline = true
     video.crossOrigin = 'anonymous'
 
     const onCanPlay = () => {
       if (disposed || !displayMesh) return
+
+      // ── 8. Create video texture ─────────────────────────────────────────
       const tex = new THREE.VideoTexture(video)
       tex.minFilter = THREE.LinearFilter
       tex.magFilter = THREE.LinearFilter
       tex.colorSpace = THREE.SRGBColorSpace
-      // flipY = false: GLTF uses bottom-left UV origin.
-      // Toggle to true if video appears upside-down.
-      tex.flipY = false
-      displayMesh!.material = new THREE.MeshBasicMaterial({ map: tex, toneMapped: false })
-      console.log('[Hero GLB] Video material applied to Display_Display_0')
+      tex.flipY      = OVERLAY_FLIP_Y       // false — GLTF bottom-left UV origin
+      tex.center.set(0.5, 0.5)
+      tex.rotation   = OVERLAY_TEXTURE_ROTATION  // Math.PI/2
+
+      // ── 9. Create overlay material (self-lit, double-sided) ─────────────
+      const overlayMat = new THREE.MeshBasicMaterial({
+        map: tex,
+        toneMapped: false,
+        side: THREE.DoubleSide,
+      })
+
+      // ── 10. Create mesh and position on screen face ──────────────────────
+      overlayMesh = new THREE.Mesh(overlayGeo, overlayMat)
+
+      const faceX = OVERLAY_SIDE === 1
+        ? bbox.max.x + OVERLAY_DEPTH_OFFSET   // just in front of +X screen face
+        : bbox.min.x - OVERLAY_DEPTH_OFFSET
+
+      overlayMesh.position.set(faceX, center.y, center.z)
+      overlayMesh.rotation.set(0, OVERLAY_ROT_Y, 0)
+
+      // Attach to display mesh — inherits all model transforms + parallax
+      ;(displayMesh as THREE.Mesh).add(overlayMesh)
+
+      console.log('[Hero GLB] Video overlay attached to Display_Display_0')
       video.play().catch(() => console.warn('[Hero GLB] Autoplay blocked; first frame shown'))
     }
 
-    const onError = () => console.warn('[Hero GLB] Video load failed — original material kept')
+    const onError = () => console.warn('[Hero GLB] Video load failed — dark screen background kept')
 
     video.addEventListener('canplay', onCanPlay)
     video.addEventListener('error', onError)
     video.load()
 
+    // ── Cleanup on unmount / hot-reload ──────────────────────────────────────
     return () => {
       disposed = true
       video.removeEventListener('canplay', onCanPlay)
@@ -106,9 +162,18 @@ function GLBMonitor() {
       video.pause()
       video.src = ''
       video.load()
-      if (displayMesh && originalMaterial) {
-        displayMesh.material = originalMaterial as THREE.Material
+
+      if (overlayMesh) {
+        ;(displayMesh as THREE.Mesh).remove(overlayMesh)
+        const mat = overlayMesh.material as THREE.MeshBasicMaterial
+        if (mat.map) mat.map.dispose()
+        mat.dispose()
       }
+      overlayGeo.dispose()
+      darkMat.dispose()
+
+      // Restore original GLB material
+      ;(displayMesh as THREE.Mesh).material = originalMaterial
     }
   }, [scene])
 
@@ -124,7 +189,7 @@ function GLBMonitor() {
 
 useGLTF.preload(MODEL_PATH)
 
-// ─── Custom geometry CRT (Phase 1/2 fallback) ─────────────────────────────────
+// ─── Custom geometry CRT (Phase 1/2 fallback — USE_GLB_MODEL = false) ────────
 function CustomCRT({ videoTexture }: { videoTexture: THREE.VideoTexture | null | false }) {
   return (
     <>
@@ -172,7 +237,7 @@ function CustomCRT({ videoTexture }: { videoTexture: THREE.VideoTexture | null |
   )
 }
 
-// ─── Animated wrapper ─────────────────────────────────────────────────────────
+// ─── Animated wrapper — parallax + float ──────────────────────────────────────
 function CRTMonitor() {
   const groupRef = useRef<THREE.Group>(null)
 
@@ -223,11 +288,7 @@ function CRTMonitor() {
     smoothRef.current.y += (mouseRef.current.y - smoothRef.current.y) * 0.04
     const mx = THREE.MathUtils.clamp(smoothRef.current.x, -1, 1)
     const my = THREE.MathUtils.clamp(smoothRef.current.y, -1, 1)
-
     groupRef.current.position.y = 0.10 + Math.sin(t * 0.55) * 0.055
-
-    // GLB: zero base angle — let GLB_Y handle orientation, parallax provides 3D feel.
-    // Custom CRT keeps its original -0.20 base angle.
     const baseY = USE_GLB_MODEL ? 0 : -0.20
     groupRef.current.rotation.y = baseY + Math.sin(t * 0.32) * 0.08 + mx * 0.14
     groupRef.current.rotation.x = THREE.MathUtils.clamp(0.07 - my * 0.08, -0.02, 0.18)
