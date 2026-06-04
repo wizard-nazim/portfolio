@@ -9,11 +9,15 @@ import * as THREE from 'three'
 // ─── Toggles ──────────────────────────────────────────────────────────────────
 const USE_GLB_MODEL = true
 
-// ── Drag rotation ─────────────────────────────────────────────────────────────
-const ENABLE_DRAG_ROTATION = true
-const DRAG_ROTATION_SPEED  = 0.006
-const DRAG_YAW_LIMIT       = 0.45
-const DRAG_PITCH_LIMIT     = 0.18
+// ── Model controls ────────────────────────────────────────────────────────────
+const ENABLE_MODEL_CONTROLS = true
+const DRAG_ROTATION_SPEED   = 0.006
+const DRAG_PITCH_MIN        = -0.35
+const DRAG_PITCH_MAX        =  0.35
+const ZOOM_SPEED            = 0.001
+const ZOOM_MIN              = 0.85
+const ZOOM_MAX              = 1.35
+const ENABLE_IDLE_FLOAT     = true
 
 // ── Model variant toggle — change this one constant to switch models ──────────
 // "crt"       → working CRT GLB with video overlay
@@ -53,7 +57,7 @@ const MODEL_CONFIG = {
     overlay: {
       widthScale: 0.82,       // fraction of bbox.x
       heightScale: 0.78,      // fraction of bbox.y
-      depthOffset: 0.03,      // nudge in front of the screen face
+      depthOffset: 0.04,      // nudge in front of the screen face
       side: 1 as 1 | -1,     // 1 = bbox.max.z face, -1 = bbox.min.z face
       textureRotation: 0 as number,
       mirrorX: false as boolean,  // set true if video text appears reversed
@@ -359,6 +363,11 @@ function MacintoshModel() {
     const screenMesh = found as THREE.Mesh
     console.log(`[Mac GLB] Screen mesh "${screenMeshName}" found`)
 
+    // Darken the screen mesh so the original Sketchfab texture doesn't bleed through
+    const originalScreenMaterial = screenMesh.material
+    const screenDarkMat = new THREE.MeshBasicMaterial({ color: '#020008', toneMapped: false })
+    screenMesh.material = screenDarkMat
+
     screenMesh.geometry.computeBoundingBox()
     const bbox = screenMesh.geometry.boundingBox!
     const size = bbox.getSize(new THREE.Vector3())
@@ -405,8 +414,9 @@ function MacintoshModel() {
         map: tex,
         toneMapped: false,
         transparent: true,
-        side: THREE.DoubleSide,
-        depthTest: false,
+        side: THREE.FrontSide,
+        depthTest: true,
+        depthWrite: false,
       })
 
       overlayMesh = new THREE.Mesh(overlayGeo, overlayMat)
@@ -443,6 +453,8 @@ function MacintoshModel() {
         mat.dispose()
       }
       overlayGeo.dispose()
+      screenDarkMat.dispose()
+      screenMesh.material = originalScreenMaterial
     }
   }, [scene])
 
@@ -539,22 +551,13 @@ function CRTMonitor() {
     }
   }, [])
 
-  const mouseRef       = useRef({ x: 0, y: 0 })
-  const smoothRef      = useRef({ x: 0, y: 0 })
   const isDraggingRef  = useRef(false)
   const lastPointerRef = useRef({ x: 0, y: 0 })
   const dragRotRef     = useRef({ yaw: 0, pitch: 0 })
-  useEffect(() => {
-    const fn = (e: MouseEvent) => {
-      mouseRef.current.x =  (e.clientX / window.innerWidth)  * 2 - 1
-      mouseRef.current.y = -((e.clientY / window.innerHeight) * 2 - 1)
-    }
-    window.addEventListener('mousemove', fn)
-    return () => window.removeEventListener('mousemove', fn)
-  }, [])
+  const zoomRef        = useRef(1.0)
 
   useEffect(() => {
-    if (!ENABLE_DRAG_ROTATION) return
+    if (!ENABLE_MODEL_CONTROLS) return
     const canvas = gl.domElement
 
     const onDown = (e: PointerEvent) => {
@@ -568,20 +571,24 @@ function CRTMonitor() {
       const dx = e.clientX - lastPointerRef.current.x
       const dy = e.clientY - lastPointerRef.current.y
       lastPointerRef.current = { x: e.clientX, y: e.clientY }
-      dragRotRef.current.yaw = THREE.MathUtils.clamp(
-        dragRotRef.current.yaw + dx * DRAG_ROTATION_SPEED,
-        -DRAG_YAW_LIMIT,
-        DRAG_YAW_LIMIT,
-      )
-      dragRotRef.current.pitch = THREE.MathUtils.clamp(
+      dragRotRef.current.yaw   += dx * DRAG_ROTATION_SPEED
+      dragRotRef.current.pitch  = THREE.MathUtils.clamp(
         dragRotRef.current.pitch - dy * DRAG_ROTATION_SPEED,
-        -DRAG_PITCH_LIMIT,
-        DRAG_PITCH_LIMIT,
+        DRAG_PITCH_MIN,
+        DRAG_PITCH_MAX,
       )
     }
     const onUp = () => {
       isDraggingRef.current = false
       canvas.style.cursor = 'grab'
+    }
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      zoomRef.current = THREE.MathUtils.clamp(
+        zoomRef.current - e.deltaY * ZOOM_SPEED,
+        ZOOM_MIN,
+        ZOOM_MAX,
+      )
     }
 
     canvas.style.cursor = 'grab'
@@ -589,12 +596,14 @@ function CRTMonitor() {
     canvas.addEventListener('pointermove', onMove)
     canvas.addEventListener('pointerup', onUp)
     canvas.addEventListener('pointercancel', onUp)
+    canvas.addEventListener('wheel', onWheel, { passive: false })
 
     return () => {
       canvas.removeEventListener('pointerdown', onDown)
       canvas.removeEventListener('pointermove', onMove)
       canvas.removeEventListener('pointerup', onUp)
       canvas.removeEventListener('pointercancel', onUp)
+      canvas.removeEventListener('wheel', onWheel)
       canvas.style.cursor = ''
     }
   }, [gl])
@@ -602,20 +611,18 @@ function CRTMonitor() {
   useFrame(({ clock }) => {
     if (!groupRef.current) return
     const t = clock.elapsedTime
-    smoothRef.current.x += (mouseRef.current.x - smoothRef.current.x) * 0.04
-    smoothRef.current.y += (mouseRef.current.y - smoothRef.current.y) * 0.04
-    const mx = THREE.MathUtils.clamp(smoothRef.current.x, -1, 1)
-    const my = THREE.MathUtils.clamp(smoothRef.current.y, -1, 1)
-    // Reduce parallax while dragging so drag feels responsive
-    const pScale = isDraggingRef.current ? 0.15 : 1.0
-    groupRef.current.position.y = 0.10 + Math.sin(t * 0.55) * 0.055
+    if (ENABLE_IDLE_FLOAT) {
+      groupRef.current.position.y = 0.10 + Math.sin(t * 0.55) * 0.055
+    }
     const baseY = USE_GLB_MODEL ? 0 : -0.20
-    groupRef.current.rotation.y = baseY + Math.sin(t * 0.32) * 0.08 + mx * 0.14 * pScale + dragRotRef.current.yaw
+    groupRef.current.rotation.y = baseY + dragRotRef.current.yaw
     groupRef.current.rotation.x = THREE.MathUtils.clamp(
-      0.07 - my * 0.08 * pScale + dragRotRef.current.pitch,
-      -0.25,
-      0.45,
+      0.07 + dragRotRef.current.pitch,
+      DRAG_PITCH_MIN,
+      DRAG_PITCH_MAX,
     )
+    const z = zoomRef.current
+    groupRef.current.scale.set(z, z, z)
   })
 
   return (
