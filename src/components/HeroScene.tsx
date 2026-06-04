@@ -47,6 +47,9 @@ const MODEL_CONFIG = {
   },
 } as const
 
+// ── Set to a mesh name from the inspection log to highlight it in the scene ──
+const MACINTOSH_DEBUG_MESH_NAME = null as string | null
+
 const MODEL_PATH  = '/models/old_computer_monitor_and_tv_model..glb'
 const VIDEO_PATH  = '/media/homepage-screen.mp4'
 const SCREEN_MESH = 'Display_Display_0'
@@ -233,24 +236,61 @@ useGLTF.preload(MODEL_CONFIG.macintosh.path)
 function MacintoshModel() {
   const { scene } = useGLTF(MODEL_CONFIG.macintosh.path)
 
+  // ── Enhanced mesh inspection log ──────────────────────────────────────────
   useEffect(() => {
     if (!scene) return
+
+    scene.updateMatrixWorld(true)
 
     console.group('[Macintosh GLB] Mesh Inspection')
     scene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh
+        mesh.geometry.computeBoundingBox()
+        const bbox = mesh.geometry.boundingBox!
+        const localSize = bbox.getSize(new THREE.Vector3())
+        const worldPos = mesh.getWorldPosition(new THREE.Vector3())
+        const worldScale = mesh.getWorldScale(new THREE.Vector3())
+        const worldSize = localSize.clone().multiply(worldScale)
         console.log({
           name: mesh.name,
-          type: mesh.type,
           geometry: mesh.geometry?.type,
           material: Array.isArray(mesh.material)
             ? mesh.material.map((m) => m.name || '(unnamed)')
             : (mesh.material as THREE.Material)?.name || '(unnamed)',
+          localBBox: `${localSize.x.toFixed(3)} × ${localSize.y.toFixed(3)} × ${localSize.z.toFixed(3)}`,
+          worldPos: `(${worldPos.x.toFixed(3)}, ${worldPos.y.toFixed(3)}, ${worldPos.z.toFixed(3)})`,
+          worldSize: `${worldSize.x.toFixed(3)} × ${worldSize.y.toFixed(3)} × ${worldSize.z.toFixed(3)}`,
         })
       }
     })
     console.groupEnd()
+  }, [scene])
+
+  // ── BoxHelper debug highlight — set MACINTOSH_DEBUG_MESH_NAME to activate ──
+  useEffect(() => {
+    if (!scene || !MACINTOSH_DEBUG_MESH_NAME) return
+
+    let helper: THREE.BoxHelper | null = null
+
+    scene.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh && child.name === MACINTOSH_DEBUG_MESH_NAME) {
+        helper = new THREE.BoxHelper(child as THREE.Mesh, 0x00ff88)
+        scene.add(helper)
+        console.log(`[Macintosh GLB] Debug highlight added for "${MACINTOSH_DEBUG_MESH_NAME}"`)
+      }
+    })
+
+    if (!helper) {
+      console.warn(`[Macintosh GLB] "${MACINTOSH_DEBUG_MESH_NAME}" not found — check mesh names in inspection log`)
+    }
+
+    return () => {
+      if (helper) {
+        scene.remove(helper as THREE.BoxHelper)
+        ;(helper as THREE.BoxHelper).geometry.dispose()
+      }
+    }
   }, [scene])
 
   const t = MODEL_CONFIG.macintosh.transform
