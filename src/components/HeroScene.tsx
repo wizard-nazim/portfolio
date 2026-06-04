@@ -49,7 +49,9 @@ const MODEL_CONFIG = {
 } as const
 
 // ── Set to a mesh name from the inspection log to highlight it in the scene ──
+
 const MACINTOSH_DEBUG_MESH_NAME = null as string | null
+//const MACINTOSH_DEBUG_MESH_NAME = 'Part_2_low_UDIM_1002_0' as string | null
 
 const MODEL_PATH  = '/models/old_computer_monitor_and_tv_model..glb'
 const VIDEO_PATH  = '/media/homepage-screen.mp4'
@@ -252,8 +254,6 @@ function MacintoshModel() {
   useEffect(() => {
     if (!scene) return
 
-    scene.updateMatrixWorld(true)
-
     console.group('[Macintosh GLB] Mesh Inspection')
     scene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
@@ -261,9 +261,7 @@ function MacintoshModel() {
         mesh.geometry.computeBoundingBox()
         const bbox = mesh.geometry.boundingBox!
         const localSize = bbox.getSize(new THREE.Vector3())
-        const worldPos = mesh.getWorldPosition(new THREE.Vector3())
-        const worldScale = mesh.getWorldScale(new THREE.Vector3())
-        const worldSize = localSize.clone().multiply(worldScale)
+        const localCenter = bbox.getCenter(new THREE.Vector3())
         console.log({
           name: mesh.name,
           geometry: mesh.geometry?.type,
@@ -271,37 +269,56 @@ function MacintoshModel() {
             ? mesh.material.map((m) => m.name || '(unnamed)')
             : (mesh.material as THREE.Material)?.name || '(unnamed)',
           localBBox: `${localSize.x.toFixed(3)} × ${localSize.y.toFixed(3)} × ${localSize.z.toFixed(3)}`,
-          worldPos: `(${worldPos.x.toFixed(3)}, ${worldPos.y.toFixed(3)}, ${worldPos.z.toFixed(3)})`,
-          worldSize: `${worldSize.x.toFixed(3)} × ${worldSize.y.toFixed(3)} × ${worldSize.z.toFixed(3)}`,
+          localCenter: `(${localCenter.x.toFixed(3)}, ${localCenter.y.toFixed(3)}, ${localCenter.z.toFixed(3)})`,
         })
       }
     })
     console.groupEnd()
   }, [scene])
 
-  // ── BoxHelper debug highlight — set MACINTOSH_DEBUG_MESH_NAME to activate ──
+  // ── Material-override debug highlight — set MACINTOSH_DEBUG_MESH_NAME to activate ──
   useEffect(() => {
     if (!scene || !MACINTOSH_DEBUG_MESH_NAME) return
 
-    let helper: THREE.BoxHelper | null = null
-
+    let found: THREE.Mesh | null = null
     scene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh && child.name === MACINTOSH_DEBUG_MESH_NAME) {
-        helper = new THREE.BoxHelper(child as THREE.Mesh, 0x00ff88)
-        scene.add(helper)
-        console.log(`[Macintosh GLB] Debug highlight added for "${MACINTOSH_DEBUG_MESH_NAME}"`)
+        found = child as THREE.Mesh
       }
     })
 
-    if (!helper) {
+    if (!found) {
       console.warn(`[Macintosh GLB] "${MACINTOSH_DEBUG_MESH_NAME}" not found — check mesh names in inspection log`)
+      return
     }
 
+    // TypeScript can't narrow 'found' through the traverse callback — explicit cast needed
+    const mesh = found as THREE.Mesh
+    const originalMaterial = mesh.material
+    const matName = Array.isArray(originalMaterial)
+      ? (originalMaterial as THREE.Material[]).map(m => m.name || '(unnamed)').join(', ')
+      : (originalMaterial as THREE.Material).name || '(unnamed)'
+
+    mesh.geometry.computeBoundingBox()
+    const bbox = mesh.geometry.boundingBox!
+    const size = bbox.getSize(new THREE.Vector3())
+    const center = bbox.getCenter(new THREE.Vector3())
+
+    console.log(`[Macintosh GLB] Debug highlight: "${MACINTOSH_DEBUG_MESH_NAME}"`)
+    console.log(`  material: ${matName}`)
+    console.log(`  localBBox: ${size.x.toFixed(3)} × ${size.y.toFixed(3)} × ${size.z.toFixed(3)}`)
+    console.log(`  localCenter: (${center.x.toFixed(3)}, ${center.y.toFixed(3)}, ${center.z.toFixed(3)})`)
+
+    const debugMat = new THREE.MeshBasicMaterial({
+      color: 0x00ff44,
+      wireframe: true,
+      depthTest: false,
+    })
+    mesh.material = debugMat
+
     return () => {
-      if (helper) {
-        scene.remove(helper as THREE.BoxHelper)
-        ;(helper as THREE.BoxHelper).geometry.dispose()
-      }
+      mesh.material = originalMaterial
+      debugMat.dispose()
     }
   }, [scene])
 
