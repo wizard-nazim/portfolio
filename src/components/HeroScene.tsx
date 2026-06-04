@@ -1,8 +1,9 @@
 'use client'
 
 import { useRef, useEffect, useState, Suspense } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
-import { useGLTF } from '@react-three/drei'
+import { Canvas, useFrame, useLoader } from '@react-three/fiber'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import * as THREE from 'three'
 
 // ─── Toggles ──────────────────────────────────────────────────────────────────
@@ -66,13 +67,21 @@ const OVERLAY_FLIP_Y          = false
 const OVERLAY_TEXTURE_ROTATION = Math.PI / 2
 const OVERLAY_MIRROR_X        = true       // UV-level flip — prevents MIZAN instead of NAZIM
 
+// ─── GLTF loader setup — avoids drei/three-stdlib barrel dependency ──────────
+function setupDraco(loader: GLTFLoader) {
+  const draco = new DRACOLoader()
+  draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.5/')
+  loader.setDRACOLoader(draco)
+}
+
 // ─── GLB orientation ──────────────────────────────────────────────────────────
 // Screen face (+X in model space) → face camera (+Z) with -Math.PI/2 on Y
 const GLB_Y = -Math.PI / 2
 
 // ─── GLB model component ──────────────────────────────────────────────────────
 function GLBMonitor() {
-  const { scene, nodes } = useGLTF(MODEL_PATH)
+  const gltf = useLoader(GLTFLoader, MODEL_PATH, setupDraco)
+  const scene = gltf.scene
 
   // Mesh structure log (useful during dev, harmless in prod)
   useEffect(() => {
@@ -86,9 +95,11 @@ function GLBMonitor() {
         console.log(`  "${m.name}" visible=${m.visible} mat=${mat}`)
       }
     })
-    console.log('  nodes:', Object.keys(nodes).join(', '))
+    const nodeNames: string[] = []
+    scene.traverse((child) => { if (child.name) nodeNames.push(child.name) })
+    console.log('  nodes:', nodeNames.join(', '))
     console.groupEnd()
-  }, [scene, nodes])
+  }, [scene])
 
   useEffect(() => {
     // ── 1. Hide ground plane ─────────────────────────────────────────────────
@@ -229,12 +240,13 @@ function GLBMonitor() {
   )
 }
 
-useGLTF.preload(MODEL_PATH)
-useGLTF.preload(MODEL_CONFIG.macintosh.path)
+useLoader.preload(GLTFLoader, MODEL_PATH, setupDraco)
+useLoader.preload(GLTFLoader, MODEL_CONFIG.macintosh.path, setupDraco)
 
 // ─── Macintosh GLB candidate — mesh-inspect only, no overlay yet ─────────────
 function MacintoshModel() {
-  const { scene } = useGLTF(MODEL_CONFIG.macintosh.path)
+  const gltf = useLoader(GLTFLoader, MODEL_CONFIG.macintosh.path, setupDraco)
+  const scene = gltf.scene
 
   // ── Enhanced mesh inspection log ──────────────────────────────────────────
   useEffect(() => {
@@ -441,3 +453,4 @@ export default function HeroScene() {
     </Canvas>
   )
 }
+
