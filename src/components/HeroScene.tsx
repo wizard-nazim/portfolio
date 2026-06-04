@@ -8,6 +8,45 @@ import * as THREE from 'three'
 // ─── Toggles ──────────────────────────────────────────────────────────────────
 const USE_GLB_MODEL = true
 
+// ── Model variant toggle — change this one constant to switch models ──────────
+// "crt"       → working CRT GLB with video overlay
+// "macintosh" → Macintosh GLB candidate, mesh-inspect only (no overlay yet)
+//const MODEL_VARIANT = 'crt' as 'crt' | 'macintosh'
+const MODEL_VARIANT = 'macintosh' as 'crt' | 'macintosh'
+
+const MODEL_CONFIG = {
+  crt: {
+    path: '/models/old_computer_monitor_and_tv_model..glb',
+    screenMeshName: 'Display_Display_0',
+    hideMeshes: ['Plane_Ground_0'],
+    transform: {
+      scale: 0.65,
+      position: [0, -0.35, 0] as [number, number, number],
+      rotation: [0, -Math.PI / 2, 0] as [number, number, number],
+    },
+    overlay: {
+      scale: 0.72,
+      side: 1,
+      depthOffset: 0.01,
+      rotY: Math.PI / 2,
+      flipY: false,
+      textureRotation: Math.PI / 2,
+      mirrorX: true,
+    },
+  },
+  macintosh: {
+    path: '/models/macintosh.glb',
+    screenMeshName: null,
+    hideMeshes: [] as string[],
+    transform: {
+      scale: 2.5,
+      position: [0, -0.65, 1] as [number, number, number],
+      rotation: [0, 0, 0] as [number, number, number],
+    },
+    overlay: null,
+  },
+} as const
+
 const MODEL_PATH  = '/models/old_computer_monitor_and_tv_model..glb'
 const VIDEO_PATH  = '/media/homepage-screen.mp4'
 const SCREEN_MESH = 'Display_Display_0'
@@ -188,6 +227,42 @@ function GLBMonitor() {
 }
 
 useGLTF.preload(MODEL_PATH)
+useGLTF.preload(MODEL_CONFIG.macintosh.path)
+
+// ─── Macintosh GLB candidate — mesh-inspect only, no overlay yet ─────────────
+function MacintoshModel() {
+  const { scene } = useGLTF(MODEL_CONFIG.macintosh.path)
+
+  useEffect(() => {
+    if (!scene) return
+
+    console.group('[Macintosh GLB] Mesh Inspection')
+    scene.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh
+        console.log({
+          name: mesh.name,
+          type: mesh.type,
+          geometry: mesh.geometry?.type,
+          material: Array.isArray(mesh.material)
+            ? mesh.material.map((m) => m.name || '(unnamed)')
+            : (mesh.material as THREE.Material)?.name || '(unnamed)',
+        })
+      }
+    })
+    console.groupEnd()
+  }, [scene])
+
+  const t = MODEL_CONFIG.macintosh.transform
+  return (
+    <primitive
+      object={scene}
+      scale={t.scale}
+      position={[...t.position]}
+      rotation={[...t.rotation]}
+    />
+  )
+}
 
 // ─── Custom geometry CRT (Phase 1/2 fallback — USE_GLB_MODEL = false) ────────
 function CustomCRT({ videoTexture }: { videoTexture: THREE.VideoTexture | null | false }) {
@@ -298,7 +373,7 @@ function CRTMonitor() {
     <group ref={groupRef}>
       {USE_GLB_MODEL ? (
         <Suspense fallback={null}>
-          <GLBMonitor />
+          {MODEL_VARIANT === 'crt' ? <GLBMonitor /> : <MacintoshModel />}
         </Suspense>
       ) : (
         <CustomCRT videoTexture={videoTexture} />
