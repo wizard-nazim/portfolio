@@ -650,8 +650,8 @@ export default function HeroScene() {
       <ambientLight intensity={0.5} />
       <pointLight position={[4, 4, 4]} intensity={9.5} color="#c400ff" />
       <pointLight position={[-3, 1.5, 2.5]} intensity={20.4} color="#e2dcdc" />
-      <pointLight position={[0.5, 5, 1.5]} intensity={110.5} color="#aa00ff" />
-      <pointLight position={[0, 0.04, 2.2]} intensity={3.0} color="#5500cc" />
+      <pointLight position={[0.5, 5, 1.5]} intensity={110.5} color="#ededed" />
+      <pointLight position={[0, 0.04, 2.2]} intensity={3.0} color="#000000" />
       <pointLight position={[0, 0, -3.5]} intensity={0.6} color="#330066" />
       <CRTMonitor />
     </Canvas>
