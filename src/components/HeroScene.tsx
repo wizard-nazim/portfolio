@@ -11,7 +11,7 @@ const USE_GLB_MODEL = true
 
 // ── Model variant toggle — change this one constant to switch models ──────────
 // "crt"       → working CRT GLB with video overlay
-// "macintosh" → Macintosh GLB candidate, mesh-inspect only (no overlay yet)
+// "macintosh" → Macintosh GLB candidate with video overlay
 //const MODEL_VARIANT = 'crt' as 'crt' | 'macintosh'
 const MODEL_VARIANT = 'macintosh' as 'crt' | 'macintosh'
 
@@ -37,14 +37,22 @@ const MODEL_CONFIG = {
   },
   macintosh: {
     path: '/models/macintosh.glb',
-    screenMeshName: null,
+    screenMeshName: 'Part_2_low_UDIM_1002_0' as string | null,
     hideMeshes: [] as string[],
     transform: {
       scale: 2.5,
       position: [0, -0.65, 1] as [number, number, number],
       rotation: [0, 0, 0] as [number, number, number],
     },
-    overlay: null,
+    overlay: {
+      widthScale: 0.82,       // fraction of bbox.x
+      heightScale: 0.78,      // fraction of bbox.y
+      depthOffset: 0.03,      // nudge in front of the screen face
+      side: 1 as 1 | -1,     // 1 = bbox.max.z face, -1 = bbox.min.z face
+      textureRotation: 0 as number,
+      mirrorX: false as boolean,  // set true if video text appears reversed
+      flipY: true as boolean,
+    },
   },
 } as const
 
@@ -245,7 +253,7 @@ function GLBMonitor() {
 useLoader.preload(GLTFLoader, MODEL_PATH, setupDraco)
 useLoader.preload(GLTFLoader, MODEL_CONFIG.macintosh.path, setupDraco)
 
-// ─── Macintosh GLB candidate — mesh-inspect only, no overlay yet ─────────────
+// ─── Macintosh GLB candidate ──────────────────────────────────────────────────
 function MacintoshModel() {
   const gltf = useLoader(GLTFLoader, MODEL_CONFIG.macintosh.path, setupDraco)
   const scene = gltf.scene
@@ -319,6 +327,116 @@ function MacintoshModel() {
     return () => {
       mesh.material = originalMaterial
       debugMat.dispose()
+    }
+  }, [scene])
+
+  // ── Video overlay ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!scene) return
+    const cfg = MODEL_CONFIG.macintosh
+    const screenMeshName = cfg.screenMeshName
+    const ov = cfg.overlay
+    if (!screenMeshName || !ov) return
+
+    let found: THREE.Mesh | null = null
+    scene.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh && child.name === screenMeshName) {
+        found = child as THREE.Mesh
+      }
+    })
+
+    if (!found) {
+      console.warn(`[Mac GLB] Screen mesh "${screenMeshName}" not found`)
+      return
+    }
+
+    const screenMesh = found as THREE.Mesh
+    console.log(`[Mac GLB] Screen mesh "${screenMeshName}" found`)
+
+    screenMesh.geometry.computeBoundingBox()
+    const bbox = screenMesh.geometry.boundingBox!
+    const size = bbox.getSize(new THREE.Vector3())
+    const center = bbox.getCenter(new THREE.Vector3())
+
+    const overlayW = size.x * ov.widthScale
+    const overlayH = size.y * ov.heightScale
+    console.log(`[Mac GLB] bbox: ${size.x.toFixed(3)} × ${size.y.toFixed(3)} × ${size.z.toFixed(3)}`)
+    console.log(`[Mac GLB] overlay plane: ${overlayW.toFixed(3)} × ${overlayH.toFixed(3)}`)
+
+    const overlayGeo = new THREE.PlaneGeometry(overlayW, overlayH)
+
+    if (ov.mirrorX) {
+      const uv = overlayGeo.attributes.uv
+      for (let i = 0; i < uv.count; i++) {
+        uv.setX(i, 1 - uv.getX(i))
+      }
+      uv.needsUpdate = true
+    }
+
+    let disposed = false
+    let overlayMesh: THREE.Mesh | null = null
+
+    const video = document.createElement('video')
+    video.src         = VIDEO_PATH
+    video.autoplay    = true
+    video.loop        = true
+    video.muted       = true
+    video.playsInline = true
+    video.crossOrigin = 'anonymous'
+
+    const onCanPlay = () => {
+      if (disposed) return
+
+      const tex = new THREE.VideoTexture(video)
+      tex.minFilter = THREE.LinearFilter
+      tex.magFilter = THREE.LinearFilter
+      tex.colorSpace = THREE.SRGBColorSpace
+      tex.flipY    = ov.flipY
+      tex.center.set(0.5, 0.5)
+      tex.rotation = ov.textureRotation
+
+      const overlayMat = new THREE.MeshBasicMaterial({
+        map: tex,
+        toneMapped: false,
+        transparent: true,
+        side: THREE.DoubleSide,
+        depthTest: false,
+      })
+
+      overlayMesh = new THREE.Mesh(overlayGeo, overlayMat)
+
+      const faceZ = ov.side === 1
+        ? bbox.max.z + ov.depthOffset
+        : bbox.min.z - ov.depthOffset
+
+      overlayMesh.position.set(center.x, center.y, faceZ)
+
+      screenMesh.add(overlayMesh)
+      console.log('[Mac GLB] Video overlay attached')
+      video.play().catch(() => console.warn('[Mac GLB] Autoplay blocked'))
+    }
+
+    const onError = () => console.warn('[Mac GLB] Video load failed')
+
+    video.addEventListener('canplay', onCanPlay)
+    video.addEventListener('error', onError)
+    video.load()
+
+    return () => {
+      disposed = true
+      video.removeEventListener('canplay', onCanPlay)
+      video.removeEventListener('error', onError)
+      video.pause()
+      video.src = ''
+      video.load()
+
+      if (overlayMesh) {
+        screenMesh.remove(overlayMesh)
+        const mat = overlayMesh.material as THREE.MeshBasicMaterial
+        if (mat.map) mat.map.dispose()
+        mat.dispose()
+      }
+      overlayGeo.dispose()
     }
   }, [scene])
 
