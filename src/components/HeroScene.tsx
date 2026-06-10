@@ -19,6 +19,16 @@ const ZOOM_MIN              = 0.85
 const ZOOM_MAX              = 1.35
 const ENABLE_IDLE_FLOAT     = true
 
+// ── Macintosh screen channels — add/remove paths to change the channel list ──
+const SCREEN_CHANNELS = [
+  '/media/channel-1.mp4',
+  '/media/channel-2.mp4',
+  '/media/channel-3.mp4',
+  '/media/channel-4.mp4',
+]
+const ENABLE_SCREEN_CHANNEL_SWITCHING = true
+const SCREEN_CHANNEL_INTERVAL_MS      = 10000
+
 // ── Model variant toggle — change this one constant to switch models ──────────
 // "crt"       → working CRT GLB with video overlay
 // "macintosh" → Macintosh GLB candidate with video overlay
@@ -340,7 +350,7 @@ function MacintoshModel() {
     }
   }, [scene])
 
-  // ── Video overlay ─────────────────────────────────────────────────────────
+  // ── Video overlay with channel switching ─────────────────────────────────
   useEffect(() => {
     if (!scene) return
     const cfg = MODEL_CONFIG.macintosh
@@ -389,69 +399,83 @@ function MacintoshModel() {
     }
 
     let disposed = false
-    let overlayMesh: THREE.Mesh | null = null
+    let channelIndex = 0
+    let channelTimer: ReturnType<typeof setInterval> | null = null
 
+    // ── Single video element — src is swapped on each channel switch ─────────
     const video = document.createElement('video')
-    video.src         = VIDEO_PATH
     video.autoplay    = true
     video.loop        = true
     video.muted       = true
     video.playsInline = true
     video.crossOrigin = 'anonymous'
+    video.src         = SCREEN_CHANNELS[0]
 
+    // ── Texture / material / mesh created once — reused across all channels ──
+    const tex = new THREE.VideoTexture(video)
+    tex.minFilter = THREE.LinearFilter
+    tex.magFilter = THREE.LinearFilter
+    tex.colorSpace = THREE.SRGBColorSpace
+    tex.flipY    = ov.flipY
+    tex.center.set(0.5, 0.5)
+    tex.rotation = ov.textureRotation
+
+    const overlayMat = new THREE.MeshBasicMaterial({
+      map: tex,
+      toneMapped: false,
+      transparent: true,
+      side: THREE.FrontSide,
+      depthTest: true,
+      depthWrite: false,
+    })
+
+    const overlayMesh = new THREE.Mesh(overlayGeo, overlayMat)
+
+    const faceZ = ov.side === 1
+      ? bbox.max.z + ov.depthOffset
+      : bbox.min.z - ov.depthOffset
+
+    overlayMesh.position.set(center.x, center.y, faceZ)
+    screenMesh.add(overlayMesh)
+    console.log('[Mac GLB] Video overlay attached')
+
+    // canplay fires on initial load and after each channel switch src change
     const onCanPlay = () => {
       if (disposed) return
-
-      const tex = new THREE.VideoTexture(video)
-      tex.minFilter = THREE.LinearFilter
-      tex.magFilter = THREE.LinearFilter
-      tex.colorSpace = THREE.SRGBColorSpace
-      tex.flipY    = ov.flipY
-      tex.center.set(0.5, 0.5)
-      tex.rotation = ov.textureRotation
-
-      const overlayMat = new THREE.MeshBasicMaterial({
-        map: tex,
-        toneMapped: false,
-        transparent: true,
-        side: THREE.FrontSide,
-        depthTest: true,
-        depthWrite: false,
-      })
-
-      overlayMesh = new THREE.Mesh(overlayGeo, overlayMat)
-
-      const faceZ = ov.side === 1
-        ? bbox.max.z + ov.depthOffset
-        : bbox.min.z - ov.depthOffset
-
-      overlayMesh.position.set(center.x, center.y, faceZ)
-
-      screenMesh.add(overlayMesh)
-      console.log('[Mac GLB] Video overlay attached')
+      overlayMesh.visible = true
       video.play().catch(() => console.warn('[Mac GLB] Autoplay blocked'))
+      console.log(`[Mac GLB] Channel ${channelIndex + 1} of ${SCREEN_CHANNELS.length} playing`)
     }
-
     const onError = () => console.warn('[Mac GLB] Video load failed')
 
     video.addEventListener('canplay', onCanPlay)
     video.addEventListener('error', onError)
     video.load()
 
+    // ── Channel switching — hide overlay briefly for a cut effect ─────────────
+    if (ENABLE_SCREEN_CHANNEL_SWITCHING && SCREEN_CHANNELS.length > 1) {
+      channelTimer = setInterval(() => {
+        if (disposed) return
+        channelIndex = (channelIndex + 1) % SCREEN_CHANNELS.length
+        overlayMesh.visible = false   // dark screen shows through until canplay fires
+        video.src = SCREEN_CHANNELS[channelIndex]
+        video.load()
+        // canplay restores visibility and calls play()
+      }, SCREEN_CHANNEL_INTERVAL_MS)
+    }
+
     return () => {
       disposed = true
+      if (channelTimer) clearInterval(channelTimer)
       video.removeEventListener('canplay', onCanPlay)
       video.removeEventListener('error', onError)
       video.pause()
       video.src = ''
       video.load()
 
-      if (overlayMesh) {
-        screenMesh.remove(overlayMesh)
-        const mat = overlayMesh.material as THREE.MeshBasicMaterial
-        if (mat.map) mat.map.dispose()
-        mat.dispose()
-      }
+      screenMesh.remove(overlayMesh)
+      tex.dispose()
+      overlayMat.dispose()
       overlayGeo.dispose()
       screenDarkMat.dispose()
       screenMesh.material = originalScreenMaterial
