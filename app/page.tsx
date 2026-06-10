@@ -1,4 +1,8 @@
 import Link from 'next/link'
+import HeroSceneWrapper from '@/components/HeroSceneWrapper'
+
+// ─── Toggle: set to false to revert to the 2D GIF fallback ──────────────────
+const USE_THREE_HERO = true
 
 export default function HomePage() {
   return (
@@ -9,10 +13,14 @@ export default function HomePage() {
       <div className="home-content">
         <section className="hero-synthwave">
 
-          {/* Left: CRT frame — future Three.js placeholder */}
+          {/* Left: CRT frame — Three.js scene or 2D GIF fallback */}
           <div className="crt-frame">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/homepage-gif.gif" alt="Nazim" className="hero-gif" />
+            {USE_THREE_HERO ? (
+              <HeroSceneWrapper />
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src="/homepage-gif.gif" alt="Nazim" className="hero-gif" />
+            )}
           </div>
 
           {/* Right: text */}
@@ -72,7 +80,7 @@ export default function HomePage() {
             <div className="latest-card-thumb latest-card-thumb-text">
               <span style={{ fontFamily: 'var(--font-courier)', fontSize: 32, color: 'var(--color-text-dim)', letterSpacing: 4 }}>ZINE</span>
             </div>
-            <div className="latest-card-title">Zine — Issue #04</div>
+            <div className="latest-card-title">Zine — Sabr</div>
             <div className="latest-card-meta">Patience with your own process · 2025</div>
             <div className="card-corner" />
           </Link>
