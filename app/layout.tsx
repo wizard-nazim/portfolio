@@ -10,6 +10,7 @@ import {
 } from 'next/font/google'
 import './globals.css'
 import Shell from '@/components/Shell'
+import { Analytics } from '@vercel/analytics/next'
 
 const unifraktur = UnifrakturMaguntia({ weight: '400', subsets: ['latin'], variable: '--font-unifraktur' })
 const abril = Abril_Fatface({ weight: '400', subsets: ['latin'], variable: '--font-abril' })
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body>
         <Shell>{children}</Shell>
+        <Analytics />
       </body>
     </html>
   )
