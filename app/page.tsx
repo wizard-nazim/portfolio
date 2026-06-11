@@ -70,25 +70,52 @@ export default function HomePage() {
                 className="latest-card-cover"
               />
             </div>
-            <div className="latest-card-title">Ｐａｔｉｅｎｃｅ (صبر)</div>
+            <div className="latest-card-title">صبر</div>
             <div className="latest-card-meta">Single · 2025 · vetkat</div>
             <div className="card-corner" />
           </Link>
 
+
+
+
           {/* Zine */}
           <Link href="/zine" className="latest-card">
             <div className="latest-card-thumb latest-card-thumb-text">
-              <span style={{ fontFamily: 'var(--font-courier)', fontSize: 32, color: 'var(--color-text-dim)', letterSpacing: 4 }}>ZINE</span>
+              <img
+                src="img1.jpg"
+                alt="Afternoon cover art"
+                className="latest-card-cover"
+              />
             </div>
-            <div className="latest-card-title">Zine — Sabr</div>
-            <div className="latest-card-meta">Patience with your own process · 2025</div>
+            <div className="latest-card-title">Afternoon</div>
+            <div className="latest-card-meta">Chill Lofi Track · 2025</div>
             <div className="card-corner" />
           </Link>
+
+
+          {/* Zine */}
+          <Link href="/zine" className="latest-card">
+            <div className="latest-card-thumb latest-card-thumb-text">
+              <img
+                src="wip.png"
+                alt="Afternoon cover art"
+                className="latest-card-cover"
+              />
+            </div>
+            <div className="latest-card-title">Afternoon</div>
+            <div className="latest-card-meta">Chill Lofi Track · 2025</div>
+            <div className="card-corner" />
+          </Link>
+
 
           {/* GitHub */}
           <a href="https://github.com/wizard-nazim" target="_blank" rel="noopener" className="latest-card">
             <div className="latest-card-thumb latest-card-thumb-text">
-              <span style={{ fontFamily: 'var(--font-courier)', fontSize: 28, color: 'var(--color-text-dim)', letterSpacing: 2 }}>&lt;/&gt;</span>
+              <img
+                src="logo.png"
+                alt="GitHub logo"
+                className="latest-card-cover"
+              />
             </div>
             <div className="latest-card-title">wizard-nazim</div>
             <div className="latest-card-meta">GitHub · .NET · React · TypeScript</div>
