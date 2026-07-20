@@ -409,4 +409,4 @@ This project is open source. Customization and personal use encouraged. If you f
 
 ---
 
-*Handmade with ✦ in Cape Town, 2025*
+*Handmade with love and passion ✦ in Cape Town, 2025*
