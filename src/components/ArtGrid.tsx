@@ -12,6 +12,7 @@ export default function ArtGrid() {
   return (
     <>
       {/* Featured hero band */}
+{/*    
       <div className="art-hero-band">
         {artworks[0].imageUrl && (
           <Image
@@ -33,10 +34,34 @@ export default function ArtGrid() {
             </div>
           </div>
         </div>
+      </div>*/}
+
+      <div className="art-hero-band">
+        {artworks[0].imageUrl && (
+          <Image
+            src='/Banners/art-banner.jpg'
+            alt={artworks[0].title}
+            fill
+            style={{ objectFit: 'cover', filter: 'grayscale(20%)' }}
+            optimized
+          />
+        )}
+        <div style={{
+          position: 'absolute', inset: 0, background: 'linear-gradient(90deg, rgba(0,0,0,0.7) 0%, transparent 60%)',
+          display: 'flex', alignItems: 'center', padding: '0 24px'
+        }}>
+          <div>
+            <div className="eyebrow">THE ART CORNER:</div>
+            <div style={{ fontFamily: 'var(--font-marker)', fontSize: 22, color: 'var(--color-text)' }}>
+              {"under construction!"}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Series & Projects */}
-      <div className="section-label">Series &amp; Projects</div>
+
+      {/* Music & Projects */}
+      <div className="section-label">Music &amp; Projects</div>
       <div className="art-series-grid">
         {all.slice(0, 4).map((item) => (
           <div
@@ -52,7 +77,7 @@ export default function ArtGrid() {
                 width={64}
                 height={64}
                 className="series-thumb"
-                unoptimized
+                optimized
               />
             ) : (
               <div className="series-thumb" style={{

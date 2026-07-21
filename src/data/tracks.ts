@@ -12,7 +12,7 @@ export interface Track {
 export const tracks: Track[] = [
   {
     id: 1,
-    title: 'Ｐａｔｉｅｎｃｅ (صبر)',
+    title: 'Sabr (Patience)',
     slug: 'sabr',
     year: 2025,
     tag: 'Single',
@@ -25,15 +25,15 @@ export const tracks: Track[] = [
     title: 'Corner Shop',
     slug: 'corner-shop',
     year: 2023,
-    coverArt: null,
+    coverArt: '/art-images/art-img4.jpeg',
     soundcloudUrl: 'https://soundcloud.com/vetkat/vetkat-afternoon',
   },
   {
     id: 3,
-    title: 'ulontitled',
+    title: 'untitled',
     slug: 'ulontitled',
     year: 2026,
-    coverArt: null,
+    coverArt: '/art-images/art-img3.jpg',
     soundcloudUrl: 'https://soundcloud.com/vetkat/ulontitled',
   },
   {
@@ -41,7 +41,7 @@ export const tracks: Track[] = [
     title: 'upside down id',
     slug: 'upside-down-id',
     year: 2025,
-    coverArt: null,
+    coverArt: '/art-images/art-img1.jpg',
     soundcloudUrl: 'https://soundcloud.com/vetkat/upside-down-id',
   },
   {
@@ -49,7 +49,7 @@ export const tracks: Track[] = [
     title: 'idea 2',
     slug: 'idea-2',
     year: 2025,
-    coverArt: null,
+    coverArt: '/art-images/art-img2.jpg',
     soundcloudUrl: 'https://soundcloud.com/vetkat/fhid2',
   },
   {
@@ -57,7 +57,7 @@ export const tracks: Track[] = [
     title: 'idea',
     slug: 'idea',
     year: 2025,
-    coverArt: null,
+    coverArt: '/art-images/art-img7.jpg',
     soundcloudUrl: 'https://soundcloud.com/vetkat/fuuu',
   },
 ]

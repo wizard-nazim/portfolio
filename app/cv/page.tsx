@@ -39,8 +39,8 @@ export default function CVPage() {
         </div>
         <div className="cv-entry">
           <div>
-            <div className="cv-entry-title">Visual Art &amp; Collage</div>
-            <div className="cv-entry-desc">Cover art, collage, photography, stop motion</div>
+            <div className="cv-entry-title">Visual Art &amp; Video Editing</div>
+            <div className="cv-entry-desc">Cover art, Video editing, 3D Design</div>
           </div>
           <div className="cv-entry-year">2021 – now</div>
         </div>
@@ -58,7 +58,7 @@ export default function CVPage() {
         <div className="cv-section-title">Selected Work</div>
         <div className="cv-entry">
           <div>
-            <div className="cv-entry-title">Ｐａｔｉｅｎｃｅ (صبر)</div>
+            <div className="cv-entry-title">Sabr - Patience</div>
             <div className="cv-entry-desc">Single · SoundCloud · vetkat</div>
           </div>
           <div className="cv-entry-year">2025</div>

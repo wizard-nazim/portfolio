@@ -23,13 +23,6 @@ const SOCIALS = [
     meta: 'Code · .NET · React · TypeScript',
     href: 'https://github.com/wizard-nazim',
   },
-  {
-    platform: 'SoundCloud',
-    name: 'Ｐａｔｉｅｎｃｅ (صبر)',
-    handle: 'Latest single',
-    meta: 'Single · 2025 · vetkat',
-    href: 'https://soundcloud.com/vetkat/sabr',
-  },
 ]
 
 export default function ContactPage() {

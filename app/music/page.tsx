@@ -13,7 +13,7 @@ export default function MusicPage() {
 
         <div>
           {/* SoundCloud embed */}
-          <div className="section-label">Stream — Ｐａｔｉｅｎｃｅ (صبر)</div>
+          <div className="section-label">Stream — Sabr (Patience)</div>
           <div className="sc-embed-wrap">
             <iframe
               width="100%"
