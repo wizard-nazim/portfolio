@@ -43,7 +43,6 @@ export default function ArtGrid() {
             alt={artworks[0].title}
             fill
             style={{ objectFit: 'cover', filter: 'grayscale(20%)' }}
-            optimized
           />
         )}
         <div style={{
@@ -77,7 +76,7 @@ export default function ArtGrid() {
                 width={64}
                 height={64}
                 className="series-thumb"
-                optimized
+                
               />
             ) : (
               <div className="series-thumb" style={{
@@ -110,7 +109,6 @@ export default function ArtGrid() {
                 width={400}
                 height={400}
                 style={{ width: '100%', height: 'auto' }}
-                unoptimized
               />
             ) : (
               <div style={{
