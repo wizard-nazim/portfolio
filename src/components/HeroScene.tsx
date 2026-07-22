@@ -6,6 +6,9 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import * as THREE from 'three'
 
+// ── Model variant — which GLB is currently selectable via the hero remote ────
+export type ModelVariant = 'crt' | 'macintosh' | 'ussr_tv'
+
 // ─── Toggles ──────────────────────────────────────────────────────────────────
 const USE_GLB_MODEL = true
 
@@ -18,22 +21,6 @@ const ZOOM_SPEED            = 0.001
 const ZOOM_MIN              = 0.85
 const ZOOM_MAX              = 1.35
 const ENABLE_IDLE_FLOAT     = true
-
-// ── Macintosh screen channels — add/remove paths to change the channel list ──
-const SCREEN_CHANNELS = [
-  '/media/channel-1.mp4',
-  '/media/channel-2.mp4',
-  '/media/channel-3.mp4',
-  '/media/channel-4.mp4',
-]
-const ENABLE_SCREEN_CHANNEL_SWITCHING = true
-const SCREEN_CHANNEL_INTERVAL_MS      = 10000
-
-// ── Model variant toggle — change this one constant to switch models ──────────
-// "crt"       → working CRT GLB with video overlay
-// "macintosh" → Macintosh GLB candidate with video overlay
-//const MODEL_VARIANT = 'crt' as 'crt' | 'macintosh'
-const MODEL_VARIANT = 'macintosh' as 'crt' | 'macintosh'
 
 const MODEL_CONFIG = {
   crt: {
@@ -76,6 +63,110 @@ const MODEL_CONFIG = {
   },
 } as const
 
+// ── Generic model config — for models added after crt/macintosh ──────────────
+// Unlike crt/macintosh (hand-tuned per-model overlay code), these are driven by
+// one shared component (GenericScreenModel, below) so adding a new model is
+// just adding a config entry here instead of writing a new overlay effect.
+type FaceAxis = 'x' | 'y' | 'z'
+
+// Some GLBs (e.g. the USSR TV) don't give the screen mesh a useful node name —
+// every node is named "defaultMaterial". In that case, match by material name
+// instead of mesh/node name.
+type ScreenSelector =
+  | { by: 'name'; value: string }
+  | { by: 'material'; value: string }
+
+type OverlaySize =
+  | { kind: 'square'; scale: number }
+  | { kind: 'rect'; widthScale: number; heightScale: number }
+
+type GenericModelConfig = {
+  path: string
+  screen: ScreenSelector
+  hideMeshNames?: string[]
+  darkColor: string
+  // Which local axis is the screen's thin/normal axis (the axis you'd walk
+  // along to leave the room through the screen).
+  faceAxis: FaceAxis
+  side: 1 | -1        // 1 = bbox.max face along faceAxis, -1 = bbox.min face
+  depthOffset: number  // nudge the overlay in front of the screen surface
+  size: OverlaySize
+  flipY: boolean
+  textureRotation: number
+  mirrorX: boolean     // set true if the video text appears mirrored
+  transform: {
+    scale: number
+    position: [number, number, number]
+    rotation: [number, number, number]
+  }
+}
+
+// This was added by inspecting the GLB's raw geometry (mesh names, material
+// names, bounding boxes) — not by looking at a live render. The screen
+// face/orientation math is derived and should be correct, but
+// transform.rotation/scale/position and side are best-effort starting
+// guesses. If the model looks sideways, upside-down, or the screen faces
+// away from the camera, that's what to adjust first — see the model-variant
+// switch further down for how this plugs into the scene.
+const GENERIC_MODEL_CONFIG: Record<'ussr_tv', GenericModelConfig> = {
+  ussr_tv: {
+    path: '/models/pseudo_retro_ussr_colour_tv.glb',
+    screen: { by: 'material', value: 'Screen' },
+    darkColor: '#000',
+    faceAxis: 'x',
+    side: 1,
+    depthOffset: 0.005,
+    size: { kind: 'rect', widthScale: 0.85, heightScale: 0.85 },
+    flipY: true,
+    textureRotation: 0,
+    mirrorX: false,
+    transform: {
+      scale: 0.6,
+      position: [0, -0.2, 0],
+      rotation: [0, -Math.PI / 2, 0],
+    },
+  },
+}
+
+// ── Overlay geometry helpers shared by every model in GENERIC_MODEL_CONFIG ────
+// Plane geometry starts flat in the local XY plane (normal = local +Z).
+// Rotating it to face along faceAxis carries plane-local X/Y into two of the
+// mesh's local axes — these two helpers keep that mapping in one place
+// instead of re-deriving it per model.
+function getInPlaneDims(faceAxis: FaceAxis, size: THREE.Vector3): { width: number; height: number } {
+  switch (faceAxis) {
+    case 'x': return { width: size.z, height: size.y }
+    case 'y': return { width: size.x, height: size.z }
+    case 'z': return { width: size.x, height: size.y }
+  }
+}
+
+function getFaceRotation(faceAxis: FaceAxis, side: 1 | -1): [number, number, number] {
+  switch (faceAxis) {
+    case 'x': return [0, side * Math.PI / 2, 0]
+    case 'y': return [-side * Math.PI / 2, 0, 0]
+    case 'z': return [0, side === 1 ? 0 : Math.PI, 0]
+  }
+}
+
+function findScreenMesh(scene: THREE.Object3D, selector: ScreenSelector): THREE.Mesh | null {
+  let found: THREE.Mesh | null = null
+  scene.traverse((child) => {
+    if (found || !(child as THREE.Mesh).isMesh) return
+    const mesh = child as THREE.Mesh
+    if (selector.by === 'name') {
+      if (mesh.name === selector.value) found = mesh
+    } else {
+      const mat = mesh.material
+      const matName = Array.isArray(mat)
+        ? mat.find((m) => m.name === selector.value)?.name
+        : (mat as THREE.Material | undefined)?.name
+      if (matName === selector.value) found = mesh
+    }
+  })
+  return found
+}
+
 // ── Set to a mesh name from the inspection log to highlight it in the scene ──
 
 const MACINTOSH_DEBUG_MESH_NAME = null as string | null
@@ -108,10 +199,18 @@ function setupDraco(loader: GLTFLoader) {
 // Screen face (+X in model space) → face camera (+Z) with -Math.PI/2 on Y
 const GLB_Y = -Math.PI / 2
 
+// ── Shared prop shape for channel-driven screen content ───────────────────────
+type ChannelProps = {
+  channels: string[]
+  channelIndex: number
+}
+
 // ─── GLB model component ──────────────────────────────────────────────────────
-function GLBMonitor() {
+function GLBMonitor({ channels, channelIndex }: ChannelProps) {
   const gltf = useLoader(GLTFLoader, MODEL_PATH, setupDraco)
   const scene = gltf.scene
+  const screenRef = useRef<{ video: HTMLVideoElement; overlayMesh: THREE.Mesh } | null>(null)
+  const skipNextSwitchRef = useRef(true)
 
   // Mesh structure log (useful during dev, harmless in prod)
   useEffect(() => {
@@ -188,7 +287,7 @@ function GLBMonitor() {
     let overlayMesh: THREE.Mesh | null = null
 
     const video = document.createElement('video')
-    video.src         = VIDEO_PATH
+    video.src         = channels[channelIndex]
     video.autoplay    = true
     video.loop        = true
     video.muted       = true
@@ -227,6 +326,7 @@ function GLBMonitor() {
       // Attach to display mesh — inherits all model transforms + parallax
       ;(displayMesh as THREE.Mesh).add(overlayMesh)
 
+      screenRef.current = { video, overlayMesh }
       console.log('[Hero GLB] Video overlay attached to Display_Display_0')
       video.play().catch(() => console.warn('[Hero GLB] Autoplay blocked; first frame shown'))
     }
@@ -240,6 +340,8 @@ function GLBMonitor() {
     // ── Cleanup on unmount / hot-reload ──────────────────────────────────────
     return () => {
       disposed = true
+      screenRef.current = null
+      skipNextSwitchRef.current = true
       video.removeEventListener('canplay', onCanPlay)
       video.removeEventListener('error', onError)
       video.pause()
@@ -260,6 +362,16 @@ function GLBMonitor() {
     }
   }, [scene])
 
+  // ── React to channel changes from the hero remote (auto-advance or manual skip) ──
+  useEffect(() => {
+    if (skipNextSwitchRef.current) { skipNextSwitchRef.current = false; return }
+    const ref = screenRef.current
+    if (!ref) return
+    ref.overlayMesh.visible = false   // dark screen shows through until canplay fires
+    ref.video.src = channels[channelIndex]
+    ref.video.load()
+  }, [channelIndex, channels])
+
   return (
     <primitive
       object={scene}
@@ -274,9 +386,11 @@ useLoader.preload(GLTFLoader, MODEL_PATH, setupDraco)
 useLoader.preload(GLTFLoader, MODEL_CONFIG.macintosh.path, setupDraco)
 
 // ─── Macintosh GLB candidate ──────────────────────────────────────────────────
-function MacintoshModel() {
+function MacintoshModel({ channels, channelIndex }: ChannelProps) {
   const gltf = useLoader(GLTFLoader, MODEL_CONFIG.macintosh.path, setupDraco)
   const scene = gltf.scene
+  const screenRef = useRef<{ video: HTMLVideoElement; overlayMesh: THREE.Mesh } | null>(null)
+  const skipNextSwitchRef = useRef(true)
 
   // ── Enhanced mesh inspection log ──────────────────────────────────────────
   useEffect(() => {
@@ -399,8 +513,6 @@ function MacintoshModel() {
     }
 
     let disposed = false
-    let channelIndex = 0
-    let channelTimer: ReturnType<typeof setInterval> | null = null
 
     // ── Single video element — src is swapped on each channel switch ─────────
     const video = document.createElement('video')
@@ -409,7 +521,7 @@ function MacintoshModel() {
     video.muted       = true
     video.playsInline = true
     video.crossOrigin = 'anonymous'
-    video.src         = SCREEN_CHANNELS[0]
+    video.src         = channels[channelIndex]
 
     // ── Texture / material / mesh created once — reused across all channels ──
     const tex = new THREE.VideoTexture(video)
@@ -437,6 +549,7 @@ function MacintoshModel() {
 
     overlayMesh.position.set(center.x, center.y, faceZ)
     screenMesh.add(overlayMesh)
+    screenRef.current = { video, overlayMesh }
     console.log('[Mac GLB] Video overlay attached')
 
     // canplay fires on initial load and after each channel switch src change
@@ -444,7 +557,7 @@ function MacintoshModel() {
       if (disposed) return
       overlayMesh.visible = true
       video.play().catch(() => console.warn('[Mac GLB] Autoplay blocked'))
-      console.log(`[Mac GLB] Channel ${channelIndex + 1} of ${SCREEN_CHANNELS.length} playing`)
+      console.log(`[Mac GLB] Channel playing: ${video.src}`)
     }
     const onError = () => console.warn('[Mac GLB] Video load failed')
 
@@ -452,21 +565,10 @@ function MacintoshModel() {
     video.addEventListener('error', onError)
     video.load()
 
-    // ── Channel switching — hide overlay briefly for a cut effect ─────────────
-    if (ENABLE_SCREEN_CHANNEL_SWITCHING && SCREEN_CHANNELS.length > 1) {
-      channelTimer = setInterval(() => {
-        if (disposed) return
-        channelIndex = (channelIndex + 1) % SCREEN_CHANNELS.length
-        overlayMesh.visible = false   // dark screen shows through until canplay fires
-        video.src = SCREEN_CHANNELS[channelIndex]
-        video.load()
-        // canplay restores visibility and calls play()
-      }, SCREEN_CHANNEL_INTERVAL_MS)
-    }
-
     return () => {
       disposed = true
-      if (channelTimer) clearInterval(channelTimer)
+      screenRef.current = null
+      skipNextSwitchRef.current = true
       video.removeEventListener('canplay', onCanPlay)
       video.removeEventListener('error', onError)
       video.pause()
@@ -482,6 +584,16 @@ function MacintoshModel() {
     }
   }, [scene])
 
+  // ── React to channel changes from the hero remote (auto-advance or manual skip) ──
+  useEffect(() => {
+    if (skipNextSwitchRef.current) { skipNextSwitchRef.current = false; return }
+    const ref = screenRef.current
+    if (!ref) return
+    ref.overlayMesh.visible = false   // dark screen shows through until canplay fires
+    ref.video.src = channels[channelIndex]
+    ref.video.load()
+  }, [channelIndex, channels])
+
   const t = MODEL_CONFIG.macintosh.transform
   return (
     <primitive
@@ -489,6 +601,167 @@ function MacintoshModel() {
       scale={t.scale}
       position={[...t.position]}
       rotation={[...t.rotation]}
+    />
+  )
+}
+
+useLoader.preload(GLTFLoader, GENERIC_MODEL_CONFIG.ussr_tv.path, setupDraco)
+
+// ─── Generic GLB model — driven entirely by a GenericModelConfig entry ───────
+// Same overlay pattern as GLBMonitor/MacintoshModel (darken screen mesh, add a
+// child video-textured plane, react to channel changes) but parameterized so
+// new models don't need their own bespoke component.
+function GenericScreenModel({ config, channels, channelIndex }: { config: GenericModelConfig } & ChannelProps) {
+  const gltf = useLoader(GLTFLoader, config.path, setupDraco)
+  const scene = gltf.scene
+  const screenRef = useRef<{ video: HTMLVideoElement; overlayMesh: THREE.Mesh } | null>(null)
+  const skipNextSwitchRef = useRef(true)
+
+  // Mesh/material inspection log (useful during dev, harmless in prod)
+  useEffect(() => {
+    console.group(`[Generic GLB] ${config.path} mesh inspection`)
+    scene.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const m = child as THREE.Mesh
+        const mat = Array.isArray(m.material)
+          ? m.material.map((x) => x.name || '(unnamed)').join(', ')
+          : (m.material as THREE.Material)?.name || '(unnamed)'
+        console.log(`  "${m.name}" mat=${mat}`)
+      }
+    })
+    console.groupEnd()
+  }, [scene])
+
+  useEffect(() => {
+    config.hideMeshNames?.forEach((name) => {
+      scene.traverse((child) => {
+        if (child.name === name) child.visible = false
+      })
+    })
+
+    const screenMesh = findScreenMesh(scene, config.screen)
+    if (!screenMesh) {
+      console.warn(`[Generic GLB] screen mesh not found (${JSON.stringify(config.screen)}) in ${config.path}`)
+      return
+    }
+    console.log(`[Generic GLB] screen mesh found for ${config.path}`)
+
+    const originalMaterial = screenMesh.material
+    const darkMat = new THREE.MeshBasicMaterial({ color: config.darkColor, toneMapped: false })
+    screenMesh.material = darkMat
+
+    screenMesh.geometry.computeBoundingBox()
+    const bbox = screenMesh.geometry.boundingBox!
+    const size = bbox.getSize(new THREE.Vector3())
+    const center = bbox.getCenter(new THREE.Vector3())
+    const { width: dimW, height: dimH } = getInPlaneDims(config.faceAxis, size)
+
+    const [overlayW, overlayH] = config.size.kind === 'square'
+      ? [Math.min(dimW, dimH) * config.size.scale, Math.min(dimW, dimH) * config.size.scale]
+      : [dimW * config.size.widthScale, dimH * config.size.heightScale]
+
+    console.log(`[Generic GLB] bbox size=${size.toArray().map(v => v.toFixed(3))} overlay=${overlayW.toFixed(3)}x${overlayH.toFixed(3)}`)
+
+    const overlayGeo = new THREE.PlaneGeometry(overlayW, overlayH)
+    if (config.mirrorX) {
+      const uv = overlayGeo.attributes.uv
+      for (let i = 0; i < uv.count; i++) uv.setX(i, 1 - uv.getX(i))
+      uv.needsUpdate = true
+    }
+
+    let disposed = false
+    const video = document.createElement('video')
+    video.autoplay    = true
+    video.loop        = true
+    video.muted       = true
+    video.playsInline = true
+    video.crossOrigin = 'anonymous'
+    video.src         = channels[channelIndex]
+
+    const tex = new THREE.VideoTexture(video)
+    tex.minFilter = THREE.LinearFilter
+    tex.magFilter = THREE.LinearFilter
+    tex.colorSpace = THREE.SRGBColorSpace
+    tex.flipY    = config.flipY
+    tex.center.set(0.5, 0.5)
+    tex.rotation = config.textureRotation
+
+    const overlayMat = new THREE.MeshBasicMaterial({
+      map: tex,
+      toneMapped: false,
+      transparent: true,
+      side: THREE.FrontSide,
+      depthTest: true,
+      depthWrite: false,
+    })
+
+    const overlayMesh = new THREE.Mesh(overlayGeo, overlayMat)
+
+    const axis = config.faceAxis
+    const faceCoord = config.side === 1 ? bbox.max[axis] + config.depthOffset : bbox.min[axis] - config.depthOffset
+    const position = new THREE.Vector3(center.x, center.y, center.z)
+    position[axis] = faceCoord
+    overlayMesh.position.copy(position)
+    overlayMesh.rotation.set(...getFaceRotation(config.faceAxis, config.side))
+
+    screenMesh.add(overlayMesh)
+    screenRef.current = { video, overlayMesh }
+    console.log('[Generic GLB] Video overlay attached')
+
+    const onCanPlay = () => {
+      if (disposed) return
+      overlayMesh.visible = true
+      video.play()
+        .then(() => console.log(`[Generic GLB] Channel playing: ${video.src}`))
+        .catch(() => console.warn('[Generic GLB] Autoplay blocked'))
+    }
+    const onError = () => {
+      if (!video.src) return  // empty src during cleanup — not a real failure
+      console.warn(
+        `[Generic GLB] Video load failed src="${video.src}" code=${video.error?.code} message="${video.error?.message}"`
+      )
+    }
+
+    video.addEventListener('canplay', onCanPlay)
+    video.addEventListener('error', onError)
+    video.load()
+
+    return () => {
+      disposed = true
+      screenRef.current = null
+      skipNextSwitchRef.current = true
+      video.removeEventListener('canplay', onCanPlay)
+      video.removeEventListener('error', onError)
+      video.pause()
+      video.src = ''
+      video.load()
+
+      screenMesh.remove(overlayMesh)
+      tex.dispose()
+      overlayMat.dispose()
+      overlayGeo.dispose()
+      darkMat.dispose()
+      screenMesh.material = originalMaterial
+    }
+  }, [scene, config])
+
+  // ── React to channel changes from the hero remote (auto-advance or manual skip) ──
+  useEffect(() => {
+    if (skipNextSwitchRef.current) { skipNextSwitchRef.current = false; return }
+    const ref = screenRef.current
+    if (!ref) return
+    ref.overlayMesh.visible = false
+    ref.video.src = channels[channelIndex]
+    ref.video.load()
+  }, [channelIndex, channels])
+
+  const t = config.transform
+  return (
+    <primitive
+      object={scene}
+      scale={t.scale}
+      position={t.position}
+      rotation={t.rotation}
     />
   )
 }
@@ -542,7 +815,7 @@ function CustomCRT({ videoTexture }: { videoTexture: THREE.VideoTexture | null |
 }
 
 // ─── Animated wrapper — parallax + float ──────────────────────────────────────
-function CRTMonitor() {
+function CRTMonitor({ modelVariant, channels, channelIndex }: { modelVariant: ModelVariant } & ChannelProps) {
   const groupRef = useRef<THREE.Group>(null)
   const { gl } = useThree()
 
@@ -653,7 +926,11 @@ function CRTMonitor() {
     <group ref={groupRef}>
       {USE_GLB_MODEL ? (
         <Suspense fallback={null}>
-          {MODEL_VARIANT === 'crt' ? <GLBMonitor /> : <MacintoshModel />}
+          {modelVariant === 'crt' && <GLBMonitor channels={channels} channelIndex={channelIndex} />}
+          {modelVariant === 'macintosh' && <MacintoshModel channels={channels} channelIndex={channelIndex} />}
+          {modelVariant === 'ussr_tv' && (
+            <GenericScreenModel config={GENERIC_MODEL_CONFIG.ussr_tv} channels={channels} channelIndex={channelIndex} />
+          )}
         </Suspense>
       ) : (
         <CustomCRT videoTexture={videoTexture} />
@@ -663,7 +940,7 @@ function CRTMonitor() {
 }
 
 // ─── Scene root ───────────────────────────────────────────────────────────────
-export default function HeroScene() {
+export default function HeroScene({ modelVariant, channels, channelIndex }: { modelVariant: ModelVariant } & ChannelProps) {
   return (
     <Canvas
       style={{ width: '100%', height: '100%', display: 'block' }}
@@ -677,7 +954,7 @@ export default function HeroScene() {
       <pointLight position={[0.5, 5, 1.5]} intensity={110.5} color="#ededed" />
       <pointLight position={[0, 0.04, 2.2]} intensity={3.0} color="#000000" />
       <pointLight position={[0, 0, -3.5]} intensity={0.6} color="#330066" />
-      <CRTMonitor />
+      <CRTMonitor modelVariant={modelVariant} channels={channels} channelIndex={channelIndex} />
     </Canvas>
   )
 }

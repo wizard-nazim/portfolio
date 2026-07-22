@@ -1984,6 +1984,71 @@ body::after {
   background: rgba(255,32,32,0.06);
 }
 
+/* ─── Hero stage — CRT frame + remote controls, stacked as one grid item ── */
+.hero-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-self: center;
+  width: min(100%, 420px);
+}
+
+.hero-stage .crt-frame {
+  align-self: unset;
+  width: 100%;
+}
+
+/* ─── Hero remote — TV-remote style controls below the CRT frame ─────── */
+.hero-remote {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 2px solid var(--color-accent);
+  border-radius: 4px;
+  background: rgba(0,0,0,0.55);
+  box-shadow: 0 0 16px rgba(191,0,255,0.25);
+}
+
+.hero-remote-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-courier, monospace);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.hero-remote-field select {
+  font-family: var(--font-courier, monospace);
+  font-size: 11px;
+  background: #0a0a0a;
+  color: var(--color-text);
+  border: 1px solid var(--color-accent);
+  border-radius: 3px;
+  padding: 3px 6px;
+}
+
+.hero-remote-btn {
+  margin-left: auto;
+  font-family: var(--font-courier, monospace);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #000;
+  background: var(--color-accent);
+  border: none;
+  border-radius: 3px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.hero-remote-btn:hover { background: #e600e6; }
+
 /* ─── CRT frame — homepage GIF wrapper / Three.js placeholder ── */
 .crt-frame {
   position: relative;

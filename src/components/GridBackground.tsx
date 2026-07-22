@@ -89,10 +89,10 @@ export default function GridBackground() {
       }
 
       // ── Horizon glow line ──────────────────────────────────
-      ctx!.shadowBlur = 14
+      ctx!.shadowBlur = 25
       ctx!.shadowColor = 'rgba(200, 60, 255, 0.8)'
       ctx!.strokeStyle = 'rgba(210, 80, 255, 0.55)'
-      ctx!.lineWidth = 1.5
+      ctx!.lineWidth = 10.5
       ctx!.beginPath()
       ctx!.moveTo(0, horizonY)
       ctx!.lineTo(W, horizonY)

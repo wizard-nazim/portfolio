@@ -3,7 +3,6 @@ import HeroSceneWrapper from '@/components/HeroSceneWrapper'
 
 // ─── Toggle: set to false to revert to the 2D GIF fallback ──────────────────
 const USE_THREE_HERO = true
-
 export default function HomePage() {
   return (
     <div className="page home-bg">
@@ -13,15 +12,15 @@ export default function HomePage() {
       <div className="home-content">
         <section className="hero-synthwave">
 
-          {/* Left: CRT frame — Three.js scene or 2D GIF fallback */}
-          <div className="crt-frame">
-            {USE_THREE_HERO ? (
-              <HeroSceneWrapper />
-            ) : (
-              /* eslint-disable-next-line @next/next/no-img-element */
+          {/* Left: CRT frame — Three.js scene (+ hero remote) or 2D GIF fallback */}
+          {USE_THREE_HERO ? (
+            <HeroSceneWrapper />
+          ) : (
+            <div className="crt-frame">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/homepage-gif.gif" alt="Nazim" className="hero-gif" />
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Right: text */}
           <div className="hero-text-col">
@@ -70,13 +69,10 @@ export default function HomePage() {
                 className="latest-card-cover"
               />
             </div>
-            <div className="latest-card-title">صبر</div>
+            <div className="latest-card-title">Patience (صبر)</div>
             <div className="latest-card-meta">Single · 2025 · vetkat</div>
             <div className="card-corner" />
           </Link>
-
-
-
 
           {/* Zine */}
           <Link href="/zine" className="latest-card">
@@ -94,7 +90,21 @@ export default function HomePage() {
 
 
           {/* Zine */}
-          <Link href="/zine" className="latest-card">
+          <Link href="/music" className="latest-card">
+            <div className="latest-card-thumb latest-card-thumb-text">
+              <img
+                src="/play.gif"
+                alt="Afternoon cover art"
+                className="latest-card-cover"
+              />
+            </div>
+            <div className="latest-card-title">Afternoon</div>
+            <div className="latest-card-meta">Chill Lofi Track · 2025</div>
+            <div className="card-corner" />
+          </Link>
+
+          {/* Music */}
+          <Link href="/music" className="latest-card">
             <div className="latest-card-thumb latest-card-thumb-text">
               <img
                 src="wip.png"
@@ -106,6 +116,22 @@ export default function HomePage() {
             <div className="latest-card-meta">Chill Lofi Track · 2025</div>
             <div className="card-corner" />
           </Link>
+
+
+              <Link href="/music" className="latest-card">
+               <div className="latest-card-thumb latest-card-thumb-text">
+              <img
+                src="/art-images/art-img1.jpg"
+                alt="ID-Art"
+                className="latest-card-cover"
+              />
+            </div>
+            <div className="latest-card-title">ID-GGF</div>
+            <div className="latest-card-meta">Vetkat ID-GGF</div>
+            <div className="card-corner" />
+          </Link>
+
+
 
 
           {/* GitHub */}
